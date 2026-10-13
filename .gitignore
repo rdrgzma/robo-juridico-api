@@ -1,0 +1,33 @@
+# Segredos — nunca versionar
+.env
+*.pem
+*.key
+proxies*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Banco do painel e dados locais
+dados/
+*.db
+*.db-wal
+*.db-shm
+
+# Editores e sistema operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
