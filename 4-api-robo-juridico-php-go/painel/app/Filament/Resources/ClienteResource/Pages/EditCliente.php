@@ -6,6 +6,7 @@ use App\Filament\Resources\ClienteResource;
 use App\Services\AuditoriaService;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Support\Facades\Hash;
 
 class EditCliente extends EditRecord
 {
@@ -21,6 +22,12 @@ class EditCliente extends EditRecord
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $data['atualizado_em'] = now()->utc()->toIso8601String();
+
+        if (!empty($data['senha'])) {
+            $data['senha_hash'] = Hash::make($data['senha']);
+        }
+        unset($data['senha']);
+
         return $data;
     }
 

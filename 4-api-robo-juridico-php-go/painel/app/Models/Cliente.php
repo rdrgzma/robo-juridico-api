@@ -3,13 +3,17 @@
 namespace App\Models;
 
 use Carbon\Carbon;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Models\Contracts\HasName;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 
-class Cliente extends Model
+class Cliente extends Authenticatable implements FilamentUser, HasName
 {
-    use HasFactory;
+    use HasFactory, Notifiable;
 
     protected $table = 'clientes';
     public $timestamps = false;
@@ -17,6 +21,7 @@ class Cliente extends Model
     protected $fillable = [
         'nome',
         'email',
+        'senha_hash',
         'empresa',
         'plano',
         'valor_mensal_centavos',
@@ -24,8 +29,14 @@ class Cliente extends Model
         'limite_por_minuto',
         'ativo',
         'observacoes',
+        'ultimo_login',
         'criado_em',
         'atualizado_em',
+    ];
+
+    protected $hidden = [
+        'senha_hash',
+        'remember_token',
     ];
 
     protected function casts(): array
@@ -36,6 +47,25 @@ class Cliente extends Model
             'limite_mensal' => 'integer',
             'limite_por_minuto' => 'integer',
         ];
+    }
+
+    public function getAuthPasswordName(): string
+    {
+        return 'senha_hash';
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        if ($panel->getId() === 'portal') {
+            return (bool) $this->ativo && !empty($this->senha_hash);
+        }
+
+        return false;
+    }
+
+    public function getFilamentName(): string
+    {
+        return $this->nome ?: ($this->empresa ?: $this->email);
     }
 
     public function chaves(): HasMany

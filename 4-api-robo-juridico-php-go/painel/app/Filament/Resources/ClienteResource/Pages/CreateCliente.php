@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ClienteResource\Pages;
 use App\Filament\Resources\ClienteResource;
 use App\Services\AuditoriaService;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Support\Facades\Hash;
 
 class CreateCliente extends CreateRecord
 {
@@ -15,6 +16,12 @@ class CreateCliente extends CreateRecord
         $agora = now()->utc()->toIso8601String();
         $data['criado_em'] = $agora;
         $data['atualizado_em'] = $agora;
+
+        if (!empty($data['senha'])) {
+            $data['senha_hash'] = Hash::make($data['senha']);
+        }
+        unset($data['senha']);
+
         return $data;
     }
 

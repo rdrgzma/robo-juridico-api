@@ -44,7 +44,11 @@ class Admin extends Authenticatable implements FilamentUser, HasName
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return (bool) $this->ativo;
+        if ($panel->getId() === 'admin') {
+            return (bool) $this->ativo;
+        }
+
+        return false;
     }
 
     public function getFilamentName(): string

@@ -79,6 +79,20 @@ class ClienteResource extends Resource
                         ->default(0)
                         ->helperText('Ex: 29900 para R$ 299,00'),
                 ]),
+
+            Forms\Components\Section::make('Acesso ao Portal do Cliente')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\TextInput::make('senha')
+                        ->password()
+                        ->label('Senha do Portal')
+                        ->helperText('Defina uma senha para liberar o acesso do cliente ao Portal (/portal).')
+                        ->dehydrated(fn ($state) => filled($state))
+                        ->maxLength(255),
+                    Forms\Components\Placeholder::make('ultimo_login_info')
+                        ->label('Último Acesso ao Portal')
+                        ->content(fn (?Cliente $record): string => $record?->ultimo_login ?: 'Nunca acessou'),
+                ]),
         ]);
     }
 

@@ -46,7 +46,7 @@ class AdminAuthTest extends TestCase
             'ativo' => true,
         ]);
 
-        $panel = new Panel();
+        $panel = (new Panel())->id('admin');
         $this->assertTrue($admin->canAccessPanel($panel));
     }
 
@@ -57,7 +57,7 @@ class AdminAuthTest extends TestCase
             'ativo' => false,
         ]);
 
-        $panel = new Panel();
+        $panel = (new Panel())->id('admin');
         $this->assertFalse($admin->canAccessPanel($panel));
     }
 }

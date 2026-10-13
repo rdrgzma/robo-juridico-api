@@ -11,6 +11,10 @@ return [
             'driver' => 'session',
             'provider' => 'admins',
         ],
+        'cliente' => [
+            'driver' => 'session',
+            'provider' => 'clientes',
+        ],
     ],
 
     'providers' => [
@@ -18,11 +22,21 @@ return [
             'driver' => 'eloquent',
             'model' => App\Models\Admin::class,
         ],
+        'clientes' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Cliente::class,
+        ],
     ],
 
     'passwords' => [
         'admins' => [
             'provider' => 'admins',
+            'table' => 'password_reset_tokens',
+            'expire' => 60,
+            'throttle' => 60,
+        ],
+        'clientes' => [
+            'provider' => 'clientes',
             'table' => 'password_reset_tokens',
             'expire' => 60,
             'throttle' => 60,
