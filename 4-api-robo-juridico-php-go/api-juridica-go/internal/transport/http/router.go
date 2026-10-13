@@ -25,8 +25,10 @@ func NovoRoteador(handlers *Handlers, servicoAuth *auth.ServicoAuth, db storage.
 		EnviarErro(w, req, http.StatusMethodNotAllowed, "metodo_nao_permitido", "Método HTTP não permitido.")
 	})
 
-	// Rota pública de saúde
+	// Rotas públicas (saúde e documentação OpenAPI / Swagger UI)
 	r.Get("/saude", handlers.Saude)
+	r.Get("/openapi.json", handlers.OpenAPIJSON)
+	r.Get("/docs", handlers.SwaggerUI)
 
 	// Rotas autenticadas SEM custo de cota (sem_custo)
 	r.Group(func(sub chi.Router) {

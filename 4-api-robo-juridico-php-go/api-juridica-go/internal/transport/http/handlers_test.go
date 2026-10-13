@@ -182,3 +182,35 @@ func TestRotaNaoEncontradaUniforme404(t *testing.T) {
 		t.Errorf("Esperava código 'rota_inexistente', obtido '%s'", resp.Erro.Codigo)
 	}
 }
+
+func TestSwaggerUIERotasDocs(t *testing.T) {
+	roteador := setupRoteadorTeste()
+
+	// 1. Testa /openapi.json
+	reqJSON := httptest.NewRequest("GET", "/openapi.json", nil)
+	wJSON := httptest.NewRecorder()
+	roteador.ServeHTTP(wJSON, reqJSON)
+
+	if wJSON.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em /openapi.json, obtido %d", wJSON.Code)
+	}
+	var openapiSpec map[string]any
+	if err := json.Unmarshal(wJSON.Body.Bytes(), &openapiSpec); err != nil {
+		t.Fatalf("Erro ao decodificar /openapi.json: %v", err)
+	}
+	if openapiSpec["openapi"] != "3.1.0" {
+		t.Errorf("Versão OpenAPI incorreta: %v", openapiSpec["openapi"])
+	}
+
+	// 2. Testa /docs (Swagger UI HTML)
+	reqDocs := httptest.NewRequest("GET", "/docs", nil)
+	wDocs := httptest.NewRecorder()
+	roteador.ServeHTTP(wDocs, reqDocs)
+
+	if wDocs.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em /docs, obtido %d", wDocs.Code)
+	}
+	if wDocs.Header().Get("Content-Type") != "text/html; charset=utf-8" {
+		t.Errorf("Content-Type incorreto em /docs: %s", wDocs.Header().Get("Content-Type"))
+	}
+}

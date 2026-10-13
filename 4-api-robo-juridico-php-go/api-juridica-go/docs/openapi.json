@@ -1,0 +1,597 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Robô Jurídico — API de Processos",
+    "description": "API REST de alta performance para consulta e monitoramento de processos judiciais brasileiros. Consolida em tempo real dados públicos federados do DataJud e DJEN.\n\n### Autenticação\nTodas as rotas de dados exigem o envio da chave no cabeçalho `X-API-Key`.\n\n### Controle de Cotas\nRequisições faturáveis debitam 1 consulta da cota mensal contratada. Em caso de erro (HTTP >= 400), a consulta é estornada automaticamente.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Suporte Robô Jurídico",
+      "email": "suporte@empresa.com.br"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Servidor Local de Desenvolvimento"
+    },
+    {
+      "url": "https://api.seudominio.com.br",
+      "description": "Servidor de Produção (HTTPS)"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "paths": {
+    "/saude": {
+      "get": {
+        "tags": ["Sistema"],
+        "summary": "Verificação de Saúde da API (Liveness / Readiness)",
+        "description": "Retorna o status de operacionalidade da API e a versão atual. Rota pública.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API saudável e operacional.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ok", "versao"],
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true },
+                    "versao": { "type": "string", "example": "1.0.0" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cnj/{numero}": {
+      "get": {
+        "tags": ["Utilitários"],
+        "summary": "Decodifica e Valida Número CNJ",
+        "description": "Analisa máscara, módulo 97 e identifica tribunal sem consultar fontes externas. Não consome cota.",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "description": "Número do processo com ou sem pontuação",
+            "schema": { "type": "string", "example": "5053283-30.2024.8.13.0079" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado da decodificação do número CNJ.",
+            "headers": {
+              "X-Request-ID": { "$ref": "#/components/headers/X-Request-ID" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RespostaCNJ" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/NaoAutorizado" },
+          "429": { "$ref": "#/components/responses/LimiteExcedido" }
+        }
+      }
+    },
+    "/v1/processos/{numero}/existe": {
+      "get": {
+        "tags": ["Processos"],
+        "summary": "Checagem Rápida de Existência do Processo",
+        "description": "Verifica se o processo consta no DataJud ou DJEN. Não consome cota.",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "description": "Número CNJ com ou sem pontuação",
+            "schema": { "type": "string", "example": "5053283-30.2024.8.13.0079" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status de existência retornado com sucesso.",
+            "headers": {
+              "X-Request-ID": { "$ref": "#/components/headers/X-Request-ID" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RespostaExiste" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/NaoAutorizado" },
+          "422": { "$ref": "#/components/responses/NumeroInvalido" },
+          "503": { "$ref": "#/components/responses/FonteIndisponivel" }
+        }
+      }
+    },
+    "/v1/processos/{numero}": {
+      "get": {
+        "tags": ["Processos"],
+        "summary": "Consulta Detalhada do Processo Judicial",
+        "description": "Retorna o processo judicial completo consolidando DataJud e DJEN. Consome 1 consulta da cota.",
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "description": "Número CNJ com ou sem pontuação",
+            "schema": { "type": "string", "example": "5053283-30.2024.8.13.0079" }
+          },
+          {
+            "name": "modo",
+            "in": "query",
+            "required": false,
+            "description": "Modo de consulta ('completo' ou 'rapido')",
+            "schema": { "type": "string", "enum": ["completo", "rapido"], "default": "completo" }
+          },
+          {
+            "name": "publicacoes",
+            "in": "query",
+            "required": false,
+            "description": "Incluir publicações do DJEN",
+            "schema": { "type": "boolean", "default": true }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Processo consolidado retornado com sucesso.",
+            "headers": {
+              "X-Request-ID": { "$ref": "#/components/headers/X-Request-ID" },
+              "X-Cota-Limite": { "$ref": "#/components/headers/X-Cota-Limite" },
+              "X-Cota-Usada": { "$ref": "#/components/headers/X-Cota-Usada" },
+              "X-Cota-Restante": { "$ref": "#/components/headers/X-Cota-Restante" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RespostaProcesso" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/NaoAutorizado" },
+          "402": { "$ref": "#/components/responses/CotaEsgotada" },
+          "403": { "$ref": "#/components/responses/ContaSuspensa" },
+          "404": {
+            "description": "Processo não encontrado.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RespostaErro" }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/NumeroInvalido" },
+          "429": { "$ref": "#/components/responses/LimiteExcedido" },
+          "502": { "$ref": "#/components/responses/FalhaNaFonte" },
+          "503": { "$ref": "#/components/responses/FonteIndisponivel" }
+        }
+      }
+    },
+    "/v1/oab/{uf}/{numero}/processos": {
+      "get": {
+        "tags": ["OAB"],
+        "summary": "Processos Vinculados à Inscrição da OAB",
+        "description": "Pesquisa processos com publicações recentes do advogado. Consome 1 consulta da cota.",
+        "parameters": [
+          {
+            "name": "uf",
+            "in": "path",
+            "required": true,
+            "description": "UF da OAB",
+            "schema": { "type": "string", "example": "MG" }
+          },
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "description": "Número de inscrição",
+            "schema": { "type": "string", "example": "123456" }
+          },
+          {
+            "name": "dias",
+            "in": "query",
+            "required": false,
+            "description": "Dias retroativos (1 a 365)",
+            "schema": { "type": "integer", "default": 30 }
+          },
+          {
+            "name": "tribunal",
+            "in": "query",
+            "required": false,
+            "description": "Tribunal específico (opcional)",
+            "schema": { "type": "string", "example": "TJMG" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de processos da OAB.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RespostaOABProcessos" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/NaoAutorizado" },
+          "402": { "$ref": "#/components/responses/CotaEsgotada" },
+          "422": { "$ref": "#/components/responses/NumeroInvalido" },
+          "503": { "$ref": "#/components/responses/FonteIndisponivel" }
+        }
+      }
+    },
+    "/v1/oab/{uf}/{numero}/publicacoes": {
+      "get": {
+        "tags": ["OAB"],
+        "summary": "Publicações do DJEN da OAB no Período",
+        "description": "Retorna publicações na íntegra com teor para controle de prazos. Consome 1 consulta.",
+        "parameters": [
+          {
+            "name": "uf",
+            "in": "path",
+            "required": true,
+            "description": "UF da OAB",
+            "schema": { "type": "string", "example": "MG" }
+          },
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "description": "Número da OAB",
+            "schema": { "type": "string", "example": "123456" }
+          },
+          {
+            "name": "dias",
+            "in": "query",
+            "required": false,
+            "description": "Dias retroativos (1 a 90)",
+            "schema": { "type": "integer", "default": 7 }
+          },
+          {
+            "name": "paginas",
+            "in": "query",
+            "required": false,
+            "description": "Quantidade de páginas (1 a 20)",
+            "schema": { "type": "integer", "default": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Publicações retornadas com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RespostaOABPublicacoes" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/NaoAutorizado" },
+          "402": { "$ref": "#/components/responses/CotaEsgotada" },
+          "503": { "$ref": "#/components/responses/FonteIndisponivel" }
+        }
+      }
+    },
+    "/v1/conta": {
+      "get": {
+        "tags": ["Conta"],
+        "summary": "Extrato da Conta e Cota do Cliente",
+        "description": "Detalhes de limite mensal, consumo atual e renovação. Não consome cota.",
+        "responses": {
+          "200": {
+            "description": "Dados da conta retornados com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RespostaConta" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/NaoAutorizado" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Chave de acesso atribuída ao cliente."
+      }
+    },
+    "headers": {
+      "X-Request-ID": {
+        "description": "ID exclusivo da requisição para rastreabilidade.",
+        "schema": { "type": "string", "example": "a81d2f70364e09cb" }
+      },
+      "X-Cota-Limite": {
+        "description": "Limite total de consultas do mês.",
+        "schema": { "type": "integer", "example": 2000 }
+      },
+      "X-Cota-Usada": {
+        "description": "Consultas consumidas no mês.",
+        "schema": { "type": "integer", "example": 42 }
+      },
+      "X-Cota-Restante": {
+        "description": "Consultas remanescentes no mês.",
+        "schema": { "type": "integer", "example": 1958 }
+      },
+      "Retry-After": {
+        "description": "Tempo em segundos antes de tentar novamente.",
+        "schema": { "type": "integer", "example": 30 }
+      }
+    },
+    "responses": {
+      "NaoAutorizado": {
+        "description": "Chave de acesso ausente ou inválida.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RespostaErro" }
+          }
+        }
+      },
+      "CotaEsgotada": {
+        "description": "Cota do mês esgotada.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RespostaErro" }
+          }
+        }
+      },
+      "ContaSuspensa": {
+        "description": "Conta inativa ou suspensa.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RespostaErro" }
+          }
+        }
+      },
+      "NumeroInvalido": {
+        "description": "Número fora do padrão CNJ ou com dígito verificador errado.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RespostaErro" }
+          }
+        }
+      },
+      "LimiteExcedido": {
+        "description": "Limite de requisições por minuto excedido.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RespostaErro" }
+          }
+        }
+      },
+      "FalhaNaFonte": {
+        "description": "A fonte do CNJ devolveu uma resposta inesperada.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RespostaErro" }
+          }
+        }
+      },
+      "FonteIndisponivel": {
+        "description": "Fonte do CNJ temporariamente indisponível.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RespostaErro" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "RespostaErro": {
+        "type": "object",
+        "required": ["ok", "erro"],
+        "properties": {
+          "ok": { "type": "boolean", "example": false },
+          "erro": {
+            "type": "object",
+            "required": ["codigo", "mensagem"],
+            "properties": {
+              "codigo": { "type": "string", "example": "numero_invalido" },
+              "mensagem": { "type": "string", "example": "Número fora do padrão CNJ." },
+              "detalhes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "campo": { "type": "string", "example": "dias" },
+                    "mensagem": { "type": "string", "example": "Deve ser entre 1 e 365" }
+                  }
+                }
+              }
+            }
+          },
+          "id_requisicao": { "type": "string", "example": "0090ea8b83174305" }
+        }
+      },
+      "RespostaCNJ": {
+        "type": "object",
+        "required": ["ok", "numero", "numero_digitos", "valido"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "numero": { "type": "string", "example": "5053283-30.2024.8.13.0079" },
+          "numero_digitos": { "type": "string", "example": "50532833020248130079" },
+          "valido": { "type": "boolean", "example": true },
+          "tribunal": { "type": "string", "example": "TJMG" },
+          "segmento": { "type": "string", "example": "Justiça Estadual" },
+          "ano": { "type": "integer", "example": 2024 },
+          "origem_codigo": { "type": "integer", "example": 79 }
+        }
+      },
+      "RespostaExiste": {
+        "type": "object",
+        "required": ["ok", "numero", "existe"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "numero": { "type": "string", "example": "5053283-30.2024.8.13.0079" },
+          "existe": { "type": "boolean", "example": true },
+          "fonte": { "type": "string", "example": "datajud" }
+        }
+      },
+      "RespostaProcesso": {
+        "type": "object",
+        "required": ["ok", "consultado_em", "tempo_ms", "avisos", "processo"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "consultado_em": { "type": "string", "format": "date-time", "example": "2026-10-13T18:30:00Z" },
+          "tempo_ms": { "type": "integer", "example": 450 },
+          "avisos": { "type": "array", "items": { "type": "string" }, "example": [] },
+          "processo": { "$ref": "#/components/schemas/Processo" }
+        }
+      },
+      "Processo": {
+        "type": "object",
+        "required": ["numero", "numero_digitos", "titulo", "polos", "advogados", "movimentacoes", "publicacoes", "totais", "fontes"],
+        "properties": {
+          "numero": { "type": "string", "example": "5053283-30.2024.8.13.0079" },
+          "numero_digitos": { "type": "string", "example": "50532833020248130079" },
+          "titulo": { "type": "string", "example": "JOAO DA SILVA × BANCO EXEMPLO S.A." },
+          "tribunal": { "type": "string", "example": "TJMG" },
+          "segmento": { "type": "string", "example": "Justiça Estadual" },
+          "grau": { "type": "string", "example": "G1" },
+          "classe": { "type": "string", "example": "Procedimento Comum Cível" },
+          "assunto": { "type": "string", "example": "Indenização por Dano Material" },
+          "orgao_julgador": { "type": "string", "example": "2ª Vara Cível da Comarca de Contagem" },
+          "comarca": { "type": "string", "example": "Contagem" },
+          "link": { "type": "string", "example": "https://pje.tjmg.jus.br/..." },
+          "valor_causa": { "type": "number", "format": "float", "nullable": true, "example": 15420.50 },
+          "valor_causa_formatado": { "type": "string", "example": "R$ 15.420,50" },
+          "data_ajuizamento": { "type": "string", "format": "date-time", "nullable": true, "example": "2024-03-15T14:30:00Z" },
+          "data_ajuizamento_formatada": { "type": "string", "example": "15/03/2024" },
+          "data_ultima_movimentacao": { "type": "string", "example": "2026-09-20" },
+          "data_ultima_movimentacao_formatada": { "type": "string", "example": "20/09/2026" },
+          "polos": {
+            "type": "object",
+            "properties": {
+              "ativo": { "type": "array", "items": { "$ref": "#/components/schemas/Parte" } },
+              "passivo": { "type": "array", "items": { "$ref": "#/components/schemas/Parte" } },
+              "terceiros": { "type": "array", "items": { "$ref": "#/components/schemas/Parte" } }
+            }
+          },
+          "advogados": { "type": "array", "items": { "$ref": "#/components/schemas/Advogado" } },
+          "movimentacoes": { "type": "array", "items": { "$ref": "#/components/schemas/Movimentacao" } },
+          "publicacoes": { "type": "array", "items": { "$ref": "#/components/schemas/Publicacao" } },
+          "totais": {
+            "type": "object",
+            "properties": {
+              "partes": { "type": "integer", "example": 2 },
+              "advogados": { "type": "integer", "example": 2 },
+              "movimentacoes": { "type": "integer", "example": 38 },
+              "publicacoes": { "type": "integer", "example": 5 }
+            }
+          },
+          "fontes": { "type": "array", "items": { "type": "string" }, "example": ["datajud", "comunica"] }
+        }
+      },
+      "Parte": {
+        "type": "object",
+        "required": ["nome", "polo"],
+        "properties": {
+          "nome": { "type": "string", "example": "JOAO DA SILVA" },
+          "polo": { "type": "string", "enum": ["ativo", "passivo", "terceiro"], "example": "ativo" },
+          "advogados": { "type": "array", "items": { "$ref": "#/components/schemas/Advogado" } }
+        }
+      },
+      "Advogado": {
+        "type": "object",
+        "required": ["nome"],
+        "properties": {
+          "nome": { "type": "string", "example": "DR. CARLOS ALBERTO PEREIRA" },
+          "oab_numero": { "type": "string", "example": "123456" },
+          "oab_uf": { "type": "string", "example": "MG" },
+          "oab": { "type": "string", "example": "OAB/MG 123456" }
+        }
+      },
+      "Movimentacao": {
+        "type": "object",
+        "required": ["data", "data_formatada", "tipo", "descricao", "fonte"],
+        "properties": {
+          "data": { "type": "string", "format": "date-time", "example": "2026-09-20T11:42:00Z" },
+          "data_formatada": { "type": "string", "example": "20/09/2026" },
+          "tipo": { "type": "string", "example": "despacho" },
+          "descricao": { "type": "string", "example": "Mero expediente deferindo a juntada de documentos" },
+          "complemento": { "type": "string", "example": "Prazo de 15 dias" },
+          "orgao": { "type": "string", "example": "2ª Vara Cível" },
+          "fonte": { "type": "string", "example": "datajud" },
+          "link": { "type": "string", "example": "" }
+        }
+      },
+      "Publicacao": {
+        "type": "object",
+        "required": ["id", "texto"],
+        "properties": {
+          "id": { "type": "string", "example": "djen-987654" },
+          "data_disponibilizacao": { "type": "string", "example": "2026-09-21" },
+          "data_formatada": { "type": "string", "example": "21/09/2026" },
+          "tipo_comunicacao": { "type": "string", "example": "Intimação Eletrônica" },
+          "tipo_documento": { "type": "string", "example": "Despacho" },
+          "orgao": { "type": "string", "example": "2ª Vara Cível da Comarca de Contagem" },
+          "numero_processo": { "type": "string", "example": "5053283-30.2024.8.13.0079" },
+          "classe": { "type": "string", "example": "Procedimento Comum Cível" },
+          "texto": { "type": "string", "example": "Fica o autor intimado para réplica no prazo legal." },
+          "link": { "type": "string", "example": "https://comunica.pje.jus.br/comunicacao/987654" },
+          "partes": { "type": "array", "items": { "$ref": "#/components/schemas/Parte" } },
+          "advogados": { "type": "array", "items": { "$ref": "#/components/schemas/Advogado" } }
+        }
+      },
+      "RespostaOABProcessos": {
+        "type": "object",
+        "required": ["ok", "oab", "periodo_dias", "total", "processos"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "oab": { "type": "string", "example": "OAB/MG 123456" },
+          "periodo_dias": { "type": "integer", "example": 30 },
+          "total": { "type": "integer", "example": 4 },
+          "processos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "numero": { "type": "string", "example": "5053283-30.2024.8.13.0079" },
+                "titulo": { "type": "string", "example": "Procedimento Comum Cível" },
+                "tribunal": { "type": "string", "example": "TJMG" },
+                "classe": { "type": "string", "example": "Procedimento Comum Cível" },
+                "orgao_julgador": { "type": "string", "example": "2ª Vara Cível de Contagem" },
+                "data_ultima_movimentacao": { "type": "string", "example": "2026-09-21" },
+                "data_ultima_movimentacao_formatada": { "type": "string", "example": "21/09/2026" },
+                "publicacoes": { "type": "integer", "example": 3 }
+              }
+            }
+          }
+        }
+      },
+      "RespostaOABPublicacoes": {
+        "type": "object",
+        "required": ["ok", "oab", "inicio", "fim", "total", "publicacoes"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "oab": { "type": "string", "example": "OAB/MG 123456" },
+          "inicio": { "type": "string", "format": "date", "example": "2026-10-06" },
+          "fim": { "type": "string", "format": "date", "example": "2026-10-13" },
+          "total": { "type": "integer", "example": 7 },
+          "publicacoes": { "type": "array", "items": { "$ref": "#/components/schemas/Publicacao" } }
+        }
+      },
+      "RespostaConta": {
+        "type": "object",
+        "required": ["ok", "cliente", "usado_no_mes", "reinicia_em", "limite_por_minuto"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "cliente": { "type": "string", "example": "Escritório Advocacia Silva" },
+          "plano": { "type": "string", "example": "pro" },
+          "limite_mensal": { "type": "integer", "nullable": true, "example": 2000 },
+          "usado_no_mes": { "type": "integer", "example": 142 },
+          "restante": { "type": "integer", "nullable": true, "example": 1858 },
+          "reinicia_em": { "type": "string", "format": "date-time", "example": "2026-11-01T03:00:00Z" },
+          "limite_por_minuto": { "type": "integer", "example": 60 }
+        }
+      }
+    }
+  }
+}

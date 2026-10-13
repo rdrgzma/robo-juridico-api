@@ -14,6 +14,8 @@ Este diretório reúne o pacote completo de especificações técnicas, document
 | [`04-MANUAL-DE-INTEGRACAO-E-API-REFERENCE.md`](04-MANUAL-DE-INTEGRACAO-E-API-REFERENCE.md) | **Manual de Integração & API Reference** | Catálogo dos endpoints REST, schemas de payload, dicionário de campos, tratamento de erros e snippets (Python, Node). | Desenvolvedores Clientes, Integradores de Sistemas |
 | [`05-GUIA-DE-OPERACAO-SEGURANCA-E-LGPD.md`](05-GUIA-DE-OPERACAO-SEGURANCA-E-LGPD.md) | **Guia de Operações, Infraestrutura, Segurança e LGPD** | Procedimentos de deploy (Docker, Nginx, Systemd), backups a quente, proxies residenciais, governança LGPD e troubleshooting. | Engenheiros DevOps, Sysadmins, DPOs/Compliance |
 | [`06-ANALISE-REFATORACAO-PHP-GO-RUST.md`](06-ANALISE-REFATORACAO-PHP-GO-RUST.md) | **Estudo de Refatoração: PHP vs Go vs Rust** | Avaliação comparativa de prós e contras, desafios de concorrência, evasão de WAF e viabilidade técnica. | Arquitetos de Software, CTOs, Engenheiros de Backend |
+| [`07-GUIA-DE-DEPLOY-DA-API.md`](07-GUIA-DE-DEPLOY-DA-API.md) | **Guia de Deploy e Operação em Produção** | Manual passo a passo para deploy via Docker, Systemd Bare-Metal, Proxy Reverso (Caddy/Nginx SSL), Backups e CI/CD. | Engenheiros DevOps, Sysadmins, SREs |
+| [`openapi.yaml`](openapi.yaml) / [`openapi.json`](openapi.json) | **Especificação OpenAPI 3.1.0 (Swagger)** | Definição formal de todos os endpoints, esquemas de entrada/saída, headers de cota e códigos HTTP. | Desenvolvedores, Integradores, Ferramentas Swagger/Postman |
 
 ---
 

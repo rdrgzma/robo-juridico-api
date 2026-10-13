@@ -1,6 +1,7 @@
 package http
 
 import (
+	_ "embed"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,6 +14,47 @@ import (
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/service"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/storage"
 )
+
+//go:embed openapi.json
+var openAPIJSON []byte
+
+const swaggerUIHTML = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Robô Jurídico — Documentação Swagger</title>
+  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+  <link rel="icon" type="image/png" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/favicon-32x32.png" />
+  <style>
+    html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+    *, *:before, *:after { box-sizing: inherit; }
+    body { margin: 0; background: #fafafa; }
+    .swagger-ui .topbar { display: none; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = function() {
+      window.ui = SwaggerUIBundle({
+        url: "/openapi.json",
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "BaseLayout"
+      });
+    };
+  </script>
+</body>
+</html>`
 
 var ufsValidas = map[string]bool{
 	"AC": true, "AL": true, "AM": true, "AP": true, "BA": true, "CE": true,
@@ -45,6 +87,21 @@ func (h *Handlers) Saude(w http.ResponseWriter, r *http.Request) {
 		"ok":     true,
 		"versao": h.versao,
 	})
+}
+
+// OpenAPIJSON serve a especificação OpenAPI 3.1.0 em JSON (/openapi.json)
+func (h *Handlers) OpenAPIJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(openAPIJSON)
+}
+
+// SwaggerUI serve a interface interativa do Swagger UI (/docs)
+func (h *Handlers) SwaggerUI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(swaggerUIHTML))
 }
 
 // DecodificarCNJ decodifica o número CNJ sem consultar fontes externas (/v1/cnj/{numero})
