@@ -1,0 +1,65 @@
+# ==============================================================================
+# Docker Compose para Robô Jurídico (API em Go + Painel Administrativo em PHP/Filament)
+# ==============================================================================
+#
+# Arquitetura:
+# - api-juridica-go: Porta 8000 (Go 1.24, roteamento nativo, alta performance)
+# - painel-admin:    Porta 8080 (PHP 8.4, Laravel 13, Filament v5)
+# - SQLite WAL:      Volume compartilhado (/app/dados/api.db) para leitura e escrita concorrentes
+# ==============================================================================
+
+services:
+  api-juridica-go:
+    build:
+      context: ./api-juridica-go
+      dockerfile: Dockerfile
+    container_name: robo-juridico-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - DB_PATH=/app/dados/api.db
+      - LOG_LEVEL=info
+      - APP_ENV=production
+    volumes:
+      - shared-dados:/app/dados
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/saude"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  painel-admin:
+    build:
+      context: ./painel
+      dockerfile: Dockerfile
+    container_name: robo-juridico-painel
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_NAME=RoboJuridicoPainel
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_URL=http://localhost:8080
+      - APP_KEY=base64:3fP9s0kK2vGf8M2xT1bN8Q1Z4q5w8r9y0u1i2o3p4a5=
+      - DB_CONNECTION=sqlite
+      - DB_DATABASE=/app/dados/api.db
+      - SESSION_DRIVER=file
+      - CACHE_STORE=file
+    volumes:
+      - shared-dados:/app/dados
+    depends_on:
+      - api-juridica-go
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  shared-dados:
+    driver: local
