@@ -32,7 +32,30 @@ Toda a documentação técnica, especificação de requisitos e guias operaciona
 
 ---
 
-## 🚀 Instalação Rápida
+## 🐳 Executando com Docker (Recomendado para Produção)
+
+A forma mais rápida e isolada de rodar a API é através do Docker Compose:
+
+```bash
+# 1. Copie o arquivo de variáveis de ambiente
+copy .env.exemplo .env   # Windows
+# cp .env.exemplo .env   # Linux / macOS
+
+# 2. Construa a imagem e suba o contêiner em segundo plano
+docker compose up -d --build
+
+# 3. Verifique a integridade e os logs
+docker compose ps
+docker compose logs -f
+```
+* **API REST:** `http://localhost:8000/v1/...`
+* **Swagger Interativo:** `http://localhost:8000/docs`
+* **Painel Administrativo:** `http://localhost:8000/admin`
+* O banco de dados SQLite (`api.db`) é persistido automaticamente na pasta local `./dados/`.
+
+---
+
+## 🚀 Instalação Tradicional (Sem Docker)
 
 ### 1. Pré-requisitos
 * Python 3.10 ou superior (recomendado 3.12)

@@ -1,0 +1,39 @@
+# Git e controle de versão
+.git
+.gitignore
+
+# Ambientes virtuais e pacotes Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+ENV/
+env/
+
+# Testes e linters
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Banco de dados e dados locais persistentes
+dados/
+*.db
+*.db-wal
+*.db-shm
+
+# Segredos
+.env
+*.pem
+*.key
+proxies*.txt
+
+# Editores e SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
