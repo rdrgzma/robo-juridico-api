@@ -13,6 +13,7 @@ Este diretório reúne o pacote completo de especificações técnicas, document
 | [`03-DOCUMENTACAO-TECNICA-E-ARQUITETURA.md`](03-DOCUMENTACAO-TECNICA-E-ARQUITETURA.md) | **Especificação Técnica e Arquitetura de Software** | Diagramas C4/Mermaid, fluxo concorrente, cache anti-thundering herd, banco de dados SQLite WAL e segurança. | Arquitetos de Software, Engenheiros de Backend |
 | [`04-MANUAL-DE-INTEGRACAO-E-API-REFERENCE.md`](04-MANUAL-DE-INTEGRACAO-E-API-REFERENCE.md) | **Manual de Integração & API Reference** | Catálogo dos endpoints REST, schemas de payload, dicionário de campos, tratamento de erros e snippets (Python, Node). | Desenvolvedores Clientes, Integradores de Sistemas |
 | [`05-GUIA-DE-OPERACAO-SEGURANCA-E-LGPD.md`](05-GUIA-DE-OPERACAO-SEGURANCA-E-LGPD.md) | **Guia de Operações, Infraestrutura, Segurança e LGPD** | Procedimentos de deploy (Docker, Nginx, Systemd), backups a quente, proxies residenciais, governança LGPD e troubleshooting. | Engenheiros DevOps, Sysadmins, DPOs/Compliance |
+| [`06-ANALISE-REFATORACAO-PHP-GO-RUST.md`](06-ANALISE-REFATORACAO-PHP-GO-RUST.md) | **Estudo de Refatoração: PHP vs Go vs Rust** | Avaliação comparativa de prós e contras, desafios de concorrência, evasão de WAF e viabilidade técnica. | Arquitetos de Software, CTOs, Engenheiros de Backend |
 
 ---
 
