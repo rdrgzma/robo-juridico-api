@@ -1,0 +1,29 @@
+services:
+  api-juridica-go:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: robo-juridico-api-go
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - API_BANCO=/app/dados/api.db
+      - API_LIMITE_POR_MINUTO=60
+      - DATAJUD_TIMEOUT=90
+      - COMUNICA_TIMEOUT=12
+      - API_CHAVES=admin:minha-chave-secreta-longa-32-caracteres-ok
+    volumes:
+      - dados-api-go:/app/dados
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/saude"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  dados-api-go:
+    name: robo_juridico_api_go_dados
