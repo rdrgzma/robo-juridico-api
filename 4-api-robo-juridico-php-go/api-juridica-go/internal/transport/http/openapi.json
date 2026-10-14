@@ -22,6 +22,9 @@
   "security": [
     {
       "ApiKeyAuth": []
+    },
+    {
+      "BearerAuth": []
     }
   ],
   "paths": {
@@ -301,6 +304,12 @@
         "in": "header",
         "name": "X-API-Key",
         "description": "Chave de acesso atribuída ao cliente."
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Token",
+        "description": "Token de autoatendimento no formato rj_live_..."
       }
     },
     "headers": {

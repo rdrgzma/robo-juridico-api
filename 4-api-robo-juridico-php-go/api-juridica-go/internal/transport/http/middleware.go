@@ -173,6 +173,13 @@ func MiddlewareAuth(servicoAuth *auth.ServicoAuth, db storage.BancoDados, cobrav
 			ip := ObterIP(r)
 
 			chave := strings.TrimSpace(r.Header.Get("X-API-Key"))
+			if chave == "" {
+				authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+				if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+					chave = strings.TrimSpace(authHeader[7:])
+				}
+			}
+
 			identidade, err := servicoAuth.Autenticar(r.Context(), chave, ip)
 			if err != nil {
 				if appErr, ok := err.(*domain.ErroAPI); ok {
@@ -182,7 +189,7 @@ func MiddlewareAuth(servicoAuth *auth.ServicoAuth, db storage.BancoDados, cobrav
 					EnviarErro(w, r, appErr.Status, appErr.Codigo, appErr.Mensagem)
 					return
 				}
-				EnviarErro(w, r, http.StatusUnauthorized, "nao_autorizado", "Envie uma chave válida no cabeçalho X-API-Key.")
+				EnviarErro(w, r, http.StatusUnauthorized, "nao_autorizado", "Envie uma chave válida no cabeçalho X-API-Key ou Authorization: Bearer <chave>.")
 				return
 			}
 
@@ -227,4 +234,21 @@ func MiddlewareAuth(servicoAuth *auth.ServicoAuth, db storage.BancoDados, cobrav
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// MiddlewareCORS adiciona cabeçalhos CORS padrão e responde a preflight OPTIONS
+func MiddlewareCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, X-API-Key, Content-Type, Accept, Origin, X-Requested-With")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

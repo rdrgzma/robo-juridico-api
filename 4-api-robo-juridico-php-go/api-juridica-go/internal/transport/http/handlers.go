@@ -2,6 +2,7 @@ package http
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -188,6 +189,88 @@ func (h *Handlers) Processo(w http.ResponseWriter, r *http.Request) {
 	pubParam := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("publicacoes")))
 	if pubParam == "false" || pubParam == "0" || pubParam == "nao" || pubParam == "não" {
 		comPublicacoes = false
+	}
+
+	inicio := time.Now()
+	proc, avisos, err := h.orquestrador.ConsultarProcessoDetalhado(r.Context(), parsed.Formatado, comPublicacoes, modo)
+	if err != nil {
+		if err == domain.ErrFonteIndisponivel {
+			w.Header().Set("Retry-After", "30")
+			EnviarErro(w, r, http.StatusServiceUnavailable, "fonte_indisponivel",
+				"A fonte do CNJ não respondeu. Tente de novo em instantes.")
+			return
+		}
+		if err == domain.ErrNumeroInvalido {
+			EnviarErro(w, r, http.StatusUnprocessableEntity, "numero_invalido", "Número fora do padrão CNJ.")
+			return
+		}
+		EnviarErro(w, r, http.StatusBadGateway, "falha_na_fonte", "A fonte do CNJ devolveu uma resposta inesperada.")
+		return
+	}
+
+	if proc == nil {
+		if len(avisos) > 0 {
+			w.Header().Set("Retry-After", "30")
+			EnviarErro(w, r, http.StatusServiceUnavailable, "fonte_indisponivel", strings.Join(avisos, " "))
+			return
+		}
+		EnviarErro(w, r, http.StatusNotFound, "processo_nao_encontrado",
+			"O processo não aparece no DataJud nem no DJEN. Se foi distribuído agora, tente de novo mais tarde; processo em segredo de justiça não é publicado.")
+		return
+	}
+
+	ms := time.Since(inicio).Milliseconds()
+	JSON(w, http.StatusOK, domain.RespostaProcesso{
+		OK:           true,
+		ConsultadoEm: time.Now().UTC().Format(time.RFC3339),
+		TempoMs:      ms,
+		Avisos:       avisos,
+		Processo:     *proc,
+	})
+}
+
+// RequisicaoConsultarProcesso representa o payload de consulta via POST JSON
+type RequisicaoConsultarProcesso struct {
+	NumeroProcesso string `json:"numero_processo"`
+	Numero         string `json:"numero"`
+	Modo           string `json:"modo"`
+	Publicacoes    *bool  `json:"publicacoes"`
+}
+
+// ConsultarProcessoJSON consulta dados do processo via corpo JSON (POST /v1/processos/consultar)
+func (h *Handlers) ConsultarProcessoJSON(w http.ResponseWriter, r *http.Request) {
+	var reqBody RequisicaoConsultarProcesso
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		EnviarErro(w, r, http.StatusUnprocessableEntity, "entrada_invalida",
+			"Corpo da requisição deve ser um JSON válido contendo 'numero_processo'.")
+		return
+	}
+
+	numero := reqBody.NumeroProcesso
+	if numero == "" {
+		numero = reqBody.Numero
+	}
+
+	parsed := cnj.Parse(numero)
+	if !parsed.Valido {
+		EnviarErro(w, r, http.StatusUnprocessableEntity, "numero_invalido",
+			"Número fora do padrão CNJ (NNNNNNN-DD.AAAA.J.TR.OOOO) ou com dígito verificador errado.")
+		return
+	}
+
+	modo := strings.ToLower(strings.TrimSpace(reqBody.Modo))
+	if modo == "" {
+		modo = "completo"
+	}
+	if modo != "completo" && modo != "rapido" {
+		EnviarErro(w, r, http.StatusUnprocessableEntity, "entrada_invalida",
+			"Modo inválido. Valores aceitos: 'completo', 'rapido'.")
+		return
+	}
+
+	comPublicacoes := true
+	if reqBody.Publicacoes != nil {
+		comPublicacoes = *reqBody.Publicacoes
 	}
 
 	inicio := time.Now()

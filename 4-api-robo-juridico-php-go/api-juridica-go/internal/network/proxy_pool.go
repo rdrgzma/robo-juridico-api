@@ -104,9 +104,11 @@ func (p *ProxyPool) ExecutarComCorrida(ctx context.Context, cliente *ClienteHTTP
 		var ultimaResposta *RespostaHTTP
 		var recebidos int
 
+		timer := time.NewTimer(15 * time.Second)
 		for recebidos < len(lote) {
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				cancel()
 				return nil, ctx.Err()
 			case res := <-ch:
@@ -114,16 +116,18 @@ func (p *ProxyPool) ExecutarComCorrida(ctx context.Context, cliente *ClienteHTTP
 				if res.err == nil && res.resp != nil {
 					// Resposta definitiva encontrada: cancela as outras requisições do lote
 					if res.resp.StatusCode == 200 || res.resp.StatusCode == 400 || res.resp.StatusCode == 404 {
+						timer.Stop()
 						cancel()
 						return res.resp, nil
 					}
 					ultimaResposta = res.resp
 				}
-			case <-time.After(15 * time.Second):
+			case <-timer.C:
 				cancel()
 				recebidos = len(lote)
 			}
 		}
+		timer.Stop()
 		cancel()
 
 		if ultimaResposta != nil && ultimaResposta.StatusCode == 200 {

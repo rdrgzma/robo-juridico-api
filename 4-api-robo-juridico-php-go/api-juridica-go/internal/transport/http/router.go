@@ -14,6 +14,7 @@ func NovoRoteador(handlers *Handlers, servicoAuth *auth.ServicoAuth, db storage.
 	r := chi.NewRouter()
 
 	// Middlewares globais
+	r.Use(MiddlewareCORS)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(MiddlewareEnvelope(db))
 
@@ -30,23 +31,30 @@ func NovoRoteador(handlers *Handlers, servicoAuth *auth.ServicoAuth, db storage.
 	r.Get("/openapi.json", handlers.OpenAPIJSON)
 	r.Get("/docs", handlers.SwaggerUI)
 
-	// Rotas autenticadas SEM custo de cota (sem_custo)
-	r.Group(func(sub chi.Router) {
-		sub.Use(MiddlewareAuth(servicoAuth, db, false))
+	// Registra rotas para ambos os prefixos: /v1 e /api/v1
+	registrarRotas := func(prefixo string) {
+		// Rotas autenticadas SEM custo de cota (sem_custo)
+		r.Group(func(sub chi.Router) {
+			sub.Use(MiddlewareAuth(servicoAuth, db, false))
 
-		sub.Get("/v1/cnj/{numero}", handlers.DecodificarCNJ)
-		sub.Get("/v1/processos/{numero}/existe", handlers.ProcessoExiste)
-		sub.Get("/v1/conta", handlers.Conta)
-	})
+			sub.Get(prefixo+"/cnj/{numero}", handlers.DecodificarCNJ)
+			sub.Get(prefixo+"/processos/{numero}/existe", handlers.ProcessoExiste)
+			sub.Get(prefixo+"/conta", handlers.Conta)
+		})
 
-	// Rotas autenticadas COM dedução de cota (cobrar)
-	r.Group(func(sub chi.Router) {
-		sub.Use(MiddlewareAuth(servicoAuth, db, true))
+		// Rotas autenticadas COM dedução de cota (cobrar)
+		r.Group(func(sub chi.Router) {
+			sub.Use(MiddlewareAuth(servicoAuth, db, true))
 
-		sub.Get("/v1/processos/{numero}", handlers.Processo)
-		sub.Get("/v1/oab/{uf}/{numero}/processos", handlers.OABProcessos)
-		sub.Get("/v1/oab/{uf}/{numero}/publicacoes", handlers.OABPublicacoes)
-	})
+			sub.Get(prefixo+"/processos/{numero}", handlers.Processo)
+			sub.Post(prefixo+"/processos/consultar", handlers.ConsultarProcessoJSON)
+			sub.Get(prefixo+"/oab/{uf}/{numero}/processos", handlers.OABProcessos)
+			sub.Get(prefixo+"/oab/{uf}/{numero}/publicacoes", handlers.OABPublicacoes)
+		})
+	}
+
+	registrarRotas("/v1")
+	registrarRotas("/api/v1")
 
 	return r
 }

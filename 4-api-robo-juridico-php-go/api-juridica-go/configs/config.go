@@ -39,7 +39,7 @@ func Carregar() *Config {
 		ComunicaTimeout:       time.Duration(envInt("COMUNICA_TIMEOUT", 12)) * time.Second,
 		ComunicaTamanhoPagina: envInt("COMUNICA_TAMANHO_PAGINA", 100),
 		ComunicaTentativas:    envInt("COMUNICA_TENTATIVAS", 3),
-		BancoCaminho:          env("API_BANCO", "dados/api.db"),
+		BancoCaminho:          env("API_BANCO", env("DB_PATH", "dados/api.db")),
 		Proxies:               parseLista(env("CONSULTA_PROXIES", "")),
 		GatewayHost:           env("CONSULTA_GATEWAY_HOST", ""),
 		GatewayLogin:          env("CONSULTA_GATEWAY_LOGIN", ""),

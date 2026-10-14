@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/auth"
@@ -212,5 +213,93 @@ func TestSwaggerUIERotasDocs(t *testing.T) {
 	}
 	if wDocs.Header().Get("Content-Type") != "text/html; charset=utf-8" {
 		t.Errorf("Content-Type incorreto em /docs: %s", wDocs.Header().Get("Content-Type"))
+	}
+}
+
+func TestAutenticacaoComBearerToken(t *testing.T) {
+	roteador := setupRoteadorTeste()
+
+	req := httptest.NewRequest("GET", "/v1/conta", nil)
+	req.Header.Set("Authorization", "Bearer "+chaveTesteValida)
+	w := httptest.NewRecorder()
+	roteador.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 via Bearer Token, obtido %d", w.Code)
+	}
+
+	var corpo map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &corpo); err != nil {
+		t.Fatalf("Erro ao decodificar JSON: %v", err)
+	}
+	if corpo["cliente"] != "cliente-teste" {
+		t.Errorf("Cliente incorreto na resposta: %v", corpo["cliente"])
+	}
+}
+
+func TestMiddlewareCORS_OptionsPreflight(t *testing.T) {
+	roteador := setupRoteadorTeste()
+
+	req := httptest.NewRequest("OPTIONS", "/v1/processos/5053283-30.2024.8.13.0079", nil)
+	w := httptest.NewRecorder()
+	roteador.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("Esperado 204 No Content para OPTIONS preflight, obtido %d", w.Code)
+	}
+	if w.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Errorf("CORS Allow-Origin incorreto: %s", w.Header().Get("Access-Control-Allow-Origin"))
+	}
+	if w.Header().Get("Access-Control-Allow-Methods") == "" {
+		t.Errorf("CORS Allow-Methods ausente")
+	}
+}
+
+func TestAliasRotaApiV1(t *testing.T) {
+	roteador := setupRoteadorTeste()
+
+	// Testa chamada através do alias /api/v1/cnj/...
+	req := httptest.NewRequest("GET", "/api/v1/cnj/5053283-30.2024.8.13.0079", nil)
+	req.Header.Set("Authorization", "Bearer "+chaveTesteValida)
+	w := httptest.NewRecorder()
+	roteador.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 no alias /api/v1/cnj/..., obtido %d", w.Code)
+	}
+
+	var resp domain.RespostaCNJ
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Erro ao decodificar resposta: %v", err)
+	}
+	if !resp.Valido || resp.Tribunal != "TJMG" {
+		t.Errorf("Decodificação no alias falhou: %+v", resp)
+	}
+}
+
+func TestConsultarProcessoJSON_Validacao(t *testing.T) {
+	roteador := setupRoteadorTeste()
+
+	// 1. JSON inválido (número CNJ inválido)
+	payloadInvalido := `{"numero_processo": "123-numero-invalido"}`
+	req := httptest.NewRequest("POST", "/v1/processos/consultar", strings.NewReader(payloadInvalido))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", chaveTesteValida)
+	w := httptest.NewRecorder()
+	roteador.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("Esperado 422 para número CNJ inválido no POST, obtido %d", w.Code)
+	}
+
+	// 2. JSON malformado
+	reqBad := httptest.NewRequest("POST", "/api/v1/processos/consultar", strings.NewReader("nao-e-json"))
+	reqBad.Header.Set("Content-Type", "application/json")
+	reqBad.Header.Set("X-API-Key", chaveTesteValida)
+	wBad := httptest.NewRecorder()
+	roteador.ServeHTTP(wBad, reqBad)
+
+	if wBad.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("Esperado 422 para JSON malformado no POST, obtido %d", wBad.Code)
 	}
 }
