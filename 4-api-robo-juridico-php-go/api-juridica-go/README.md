@@ -14,6 +14,9 @@ Esta API consulta e consolida processos judiciais nas fontes oficiais do Poder J
 - **Cache Anti-Thundering Herd:** TTL em memória com sincronização via `golang.org/x/sync/singleflight` para evitar requisições duplicadas concorrentes para o mesmo número de processo.
 - **Proxy Pool Residencial:** Rotação e disparo concorrente (*race*) em múltiplos proxies HTTP/SOCKS5 para contornar bloqueios do DJEN.
 - **Proteção & Cotas:** Autenticação por SHA-256 (`X-API-Key`), rate limiting deslizante em memória e reserva atômica de cota mensal com estorno em caso de falha $\ge 400$.
+- **Motor de Liquidação Judicial (Paridade DrCalc):** Precisão arbitrária com `decimal.Decimal`, conformidade plena com a **Lei 14.905/2024** ($\max(0, \text{Selic} - \text{IPCA})$), juros com pro rata die diário e fase de execução (Art. 523 CPC 10%+10%).
+- **Worker Coletor Automático Bacen/IBGE:** Sincronização automática contínua de índices econômicos (SGS Bacen, SIDRA IBGE) e mais de 26 tabelas oficiais de Tribunais Estaduais, Federais e do Trabalho.
+- **Importador Nativo de Planilhas:** Parser em Go para `.xlsx`, `.csv`, `.tsv` e linhas coladas do clipboard sem bibliotecas externas de C.
 
 ---
 
@@ -31,6 +34,20 @@ api-juridica-go/
 │   │   └── auth.go                # Autenticação SHA-256, rate limiting e proteção contra força bruta
 │   ├── cache/
 │   │   └── cache.go               # Cache TTL em memória com singleflight
+│   ├── calculator/
+│   │   ├── collectors/
+│   │   │   ├── bacen.go           # Coletor Bacen SGS (Selic, CDI, TR, Poupança, IGP-M, etc.)
+│   │   │   ├── ibge.go            # Coletor IBGE SIDRA (IPCA, INPC, IPCA-15)
+│   │   │   ├── tribunais.go       # Sincronizador de 26+ tabelas de tribunais (TJSP, TJRJ, TRF, TST)
+│   │   │   └── worker.go          # Daemon de coleta automática diária (ticker 24h)
+│   │   ├── correction.go          # Motor de correção monetária (fatores acumulados e deflação)
+│   │   ├── engine.go              # Orquestrador contábil da liquidação judicial
+│   │   ├── importer.go            # Importador nativo de planilhas Excel (.xlsx) e CSV
+│   │   ├── interest.go            # Motor de juros de mora (Simples, Composto, Lei 14.905, Pro Rata)
+│   │   ├── models.go              # Modelos de domínio com precisão arbitrária decimal.Decimal
+│   │   ├── penalties.go           # Multas moratórias, honorários e encargos do Art. 523 CPC
+│   │   ├── repository.go          # Repositório thread-safe de índices e séries temporais
+│   │   └── seed.go                # Carga inicial com séries históricas oficiais
 │   ├── cnj/
 │   │   ├── cnj.go                 # Validador módulo 97 com big.Int, formatação e metadados
 │   │   └── cnj_test.go            # Testes unitários do validador CNJ
@@ -56,7 +73,7 @@ api-juridica-go/
 │   │   └── sqlite.go              # Driver SQLite puro (WAL, reservas atômicas de cotas)
 │   └── transport/
 │       └── http/
-│           ├── handlers.go        # Handlers HTTP de todas as rotas
+│           ├── handlers.go        # Handlers HTTP de todas as rotas (processos e cálculos)
 │           ├── handlers_test.go   # Testes automatizados da camada HTTP
 │           ├── middleware.go      # Middlewares de auditoria, Request-ID, segurança e cotas
 │           ├── response.go        # Padronização de respostas JSON e envelopes de erro
@@ -70,6 +87,8 @@ api-juridica-go/
 
 ## 📡 Endpoints da API
 
+### Módulo de Processos e Diários Oficiais (CNJ)
+
 | Método | Rota | Autenticação | Custo de Cota | Descrição |
 |---|---|---|---|---|
 | `GET` | `/saude` | Não | Não | Liveness e readiness check |
@@ -79,6 +98,17 @@ api-juridica-go/
 | `GET` | `/v1/oab/{uf}/{numero}/processos` | Sim (`X-API-Key`) | **Sim (1)** | Processos com publicações da OAB no período informado |
 | `GET` | `/v1/oab/{uf}/{numero}/publicacoes` | Sim (`X-API-Key`) | **Sim (1)** | Diário oficial na íntegra para controle de prazos |
 | `GET` | `/v1/conta` | Sim (`X-API-Key`) | Não | Consulta plano, cota mensal usada/restante e data de renovação |
+
+### Módulo de Cálculos e Liquidação Judicial (Paridade DrCalc)
+
+| Método | Rota | Autenticação | Custo de Cota | Descrição |
+|---|---|---|---|---|
+| `GET` | `/v1/calculos/indices` | Sim (`X-API-Key`) | Não | Lista todos os 26+ indexadores econômicos e tabelas dos tribunais |
+| `GET` | `/v1/calculos/indices/{codigo}/serie` | Sim (`X-API-Key`) | Não | Retorna a série histórica mensal completa do índice solicitado |
+| `POST` | `/v1/calculos/judicial` | Sim (`X-API-Key`) | Não | Executa liquidação completa de débito (correção, juros, multas e Art. 523 CPC) |
+| `POST` | `/v1/calculos/importar-planilha` | Sim (`X-API-Key`) | Não | Extrai parcelas de arquivo Excel (.xlsx), CSV (.csv) ou linhas de texto |
+| `POST` | `/v1/calculos/coletar` | Sim (`X-API-Key`) | Não | Dispara imediatamente a rotina de coleta no Bacen (SGS) e IBGE (SIDRA) |
+| `GET` | `/v1/calculos/coletar/status` | Sim (`X-API-Key`) | Não | Retorna o status e relatório da última coleta automática de índices |
 
 ---
 

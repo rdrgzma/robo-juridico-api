@@ -7,16 +7,16 @@
 
 ## 📦 Neste Pacote: O que você recebeu
 
-Esta versão (`4-api-robo-juridico-php-go`) representa a evolução de engenharia do Robô Jurídico: unimos a **velocidade brutal e concorrência nativa do Go** para o motor de consulta pública às fontes do CNJ com a **produtividade e elegância do Laravel 13 + Filament v5** para os painéis de gestão e autoatendimento.
+Esta versão (`4-api-robo-juridico-php-go`) representa a evolução de engenharia do Robô Jurídico: unimos a **velocidade brutal e concorrência nativa do Go** para o motor de consulta pública às fontes do CNJ e o **novo Motor de Cálculos Judiciais de alta precisão (paridade DrCalc e Lei 14.905/2024)** com a **produtividade e elegância do Laravel 11 + Filament v3** para os painéis de gestão, autoatendimento e **página pública de captação de leads com emissão de laudo certificado (QR Code e SHA-256)**.
 
 | Arquivo / Diretório | Para que serve |
 | :--- | :--- |
 | **`1-COMECE-AQUI.md`** | **Este guia.** Visão executiva em 3 passos para iniciar os testes e deploys imediatamente. |
-| **`2-WORKBOOK-API-ROBO-JURIDICO.md`** | **O manual definitivo.** Guia completo com 12 capítulos: pré-requisitos, passo a passo local (Docker / Sem Docker), deploy em VPS (Docker / Bare-metal), referência completa de endpoints, erros, exemplos em código, proxies e exercícios práticos. |
-| **`api-juridica-go/`** | **Motor da API REST em Go (Porta 8000).** Alta performance, compilação estática (`CGO_ENABLED=0`), validação Módulo 97 com `big.Int`, concorrência simultânea DataJud + DJEN, cache anti-thundering herd e controle atômico de cotas. |
-| **`painel/`** | **Painéis Web em PHP 8.4 + Filament v5 (Porta 8080).** Arquitetura Multi-Panel contendo o Painel Administrativo (`/admin`) e o Portal de Autoatendimento do Cliente/Desenvolvedor (`/portal`). |
+| **`2-WORKBOOK-API-ROBO-JURIDICO.md`** | **O manual definitivo.** Guia completo com 12 capítulos: pré-requisitos, passo a passo local (Docker / Sem Docker), deploy em VPS (Docker / Bare-metal), referência completa de endpoints, erros, exemplos em código, proxies, cálculos judiciais e exercícios práticos. |
+| **`api-juridica-go/`** | **Motor da API REST em Go (Porta 8000).** Alta performance, compilação estática (`CGO_ENABLED=0`), validação Módulo 97 com `big.Int`, concorrência simultânea DataJud + DJEN, **Motor de Cálculo Judicial (DrCalc, Lei 14.905/2024)**, **Coletores Bacen/IBGE**, **Importador de Planilhas (.xlsx/.csv)**, cache anti-thundering herd e controle atômico de cotas. |
+| **`painel/`** | **Painéis Web e Lead Magnet em PHP + Filament (Porta 8080).** Arquitetura Multi-Panel contendo o Painel Administrativo (`/admin`), o Portal do Cliente (`/portal`), a **Calculadora Pública Lead Magnet (`/` ou `/calculadora`)**, o **Laudo Certificado A4 com QR Code (`/laudo/{uuid}/imprimir`)** e o **Selo Público de Autenticidade (`/validar/{uuid}`)**. |
 | **`docker-compose.yml`** | **Orquestração completa pronta.** Sobe a API Go e os Painéis PHP integrados em segundos, compartilhando o volume do banco SQLite em modo WAL (`api.db`). |
-| **`api.http`** | **Coleção de testes prontos.** Arquivo para executar requisições diretamente pelo VS Code (extensão REST Client). |
+| **`api.http`** | **Coleção de testes prontos.** Arquivo para executar requisições diretamente pelo VS Code (extensão REST Client), cobrindo processos e cálculos judiciais. |
 
 ---
 
@@ -70,6 +70,7 @@ Abra o terminal na pasta `4-api-robo-juridico-php-go/` e execute:
 docker compose up -d --build
 ```
 Em menos de 1 minuto, acesse no navegador:
+* **Calculadora Pública / Lead Magnet:** [http://localhost:8080](http://localhost:8080) ou [http://localhost:8080/calculadora](http://localhost:8080/calculadora)
 * **API & Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
 * **Painel Admin:** [http://localhost:8080/admin](http://localhost:8080/admin) *(Login: `admin@empresa.com.br` | Senha: `admin123`)*
 * **Portal do Cliente:** [http://localhost:8080/portal](http://localhost:8080/portal) *(Login: `cliente@empresa.com.br` | Senha: `cliente123`)*

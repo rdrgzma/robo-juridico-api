@@ -563,6 +563,137 @@ Retorna uma lista consolidada dos processos em que a OAB informada teve publica�
 
 ---
 
+### 8. `GET /v1/calculos/indices`
+Lista todos os 26+ indexadores econômicos e tabelas práticas dos tribunais disponíveis no motor de cálculo. Não consome cota.
+
+* **Exemplo de Chamada:**
+  ```bash
+  curl -H "X-API-Key: <sua-chave>" "http://localhost:8000/v1/calculos/indices"
+  ```
+* **Resposta 200 OK:**
+  ```json
+  {
+    "ok": true,
+    "total": 26,
+    "indices": [
+      { "codigo": "TJSP", "nome": "Tabela Prática Débitos Judiciais TJSP (Lei 14.905)", "categoria": "Tribunais Estaduais" },
+      { "codigo": "IPCA", "nome": "IPCA - Índice Geral de Preços ao Consumidor Amplo (IBGE)", "categoria": "Índices Oficiais" },
+      { "codigo": "TAXA_LEGAL", "nome": "Taxa Legal de Juros (Lei 14.905/2024 - Bacen)", "categoria": "Índices Oficiais" }
+    ]
+  }
+  ```
+
+---
+
+### 9. `POST /v1/calculos/judicial`
+Executa a liquidação judicial completa de débitos com paridade DrCalc, suporte à **Lei 14.905/2024**, juros simples ou compostos com *pro rata die* diário, deflação negativa configurável e encargos da fase de cumprimento de sentença (**Art. 523 CPC 10%+10%**). Não consome cota.
+
+* **Payload Exemplo:**
+  ```json
+  {
+    "numero_processo": "0001234-56.2023.8.26.0100",
+    "data_atualizacao": "2026-10-14",
+    "indexador_codigo": "TJSP",
+    "aplicar_deflacao": false,
+    "juros_mora": {
+      "tipo": "CONVENCIONAL_MENSAL",
+      "percentual_mensal": 1.0,
+      "modo": "COMPOSTO",
+      "aplicar_prorata_die": true
+    },
+    "fase_execucao": {
+      "aplicar_art_523_multa": true,
+      "aplicar_art_523_honorarios": true,
+      "multa_moratoria_percentual": 0.0,
+      "honorarios_sucumbenciais_percentual": 0.0
+    },
+    "parcelas": [
+      {
+        "numero_item": 1,
+        "descricao": "Parcela 01 - Principal",
+        "tipo": "DEBITO",
+        "data_vencimento": "2023-01-15",
+        "valor_original": 10000.00
+      }
+    ]
+  }
+  ```
+* **Resposta 200 OK:**
+  ```json
+  {
+    "sucesso": true,
+    "resumo": {
+      "total_principal_original": 10000.00,
+      "total_principal_corrigido": 11784.46,
+      "total_juros": 6542.10,
+      "total_multas": 1832.66,
+      "total_honorarios": 1832.66,
+      "total_geral": 21991.88,
+      "data_atualizacao": "2026-10-14",
+      "indexador": "TJSP"
+    },
+    "itens": [
+      {
+        "numero_item": 1,
+        "descricao": "Parcela 01 - Principal",
+        "data_vencimento": "2023-01-15",
+        "valor_original": 10000.00,
+        "fator_correcao": 1.178446,
+        "valor_corrigido": 11784.46,
+        "valor_juros": 6542.10,
+        "subtotal": 18326.56
+      }
+    ],
+    "notas_legais": [
+      "Critério monetário: Tabela Prática Débitos Judiciais TJSP (Lei 14.905)",
+      "Juros de mora: 1,00% ao mês (Composto)",
+      "Multa de 10% e Honorários de 10% aplicados na fase de cumprimento de sentença (Art. 523, §1º CPC)"
+    ]
+  }
+  ```
+
+---
+
+### 10. `POST /v1/calculos/importar-planilha`
+Extrai parcelas em lote a partir de upload de arquivo Excel (`.xlsx`), CSV (`.csv`) ou linhas copiadas do clipboard (`Ctrl+C / Ctrl+V`). Não consome cota.
+
+* **Via Multipart Form (Arquivo):**
+  ```bash
+  curl -X POST http://localhost:8000/v1/calculos/importar-planilha \
+    -H "X-API-Key: <sua-chave>" \
+    -F "planilha=@dados.xlsx"
+  ```
+* **Via Texto Puro Colado:**
+  ```bash
+  curl -X POST http://localhost:8000/v1/calculos/importar-planilha \
+    -H "X-API-Key: <sua-chave>" \
+    -H "Content-Type: text/plain" \
+    --data-binary "15/01/2023	Parcela 01	1500,00"
+  ```
+
+---
+
+### 11. `POST /v1/calculos/coletar` e `GET /v1/calculos/coletar/status`
+Dispara e monitora o worker em background que sincroniza os índices econômicos diários e mensais no Bacen (SGS) e IBGE (SIDRA). Não consome cota.
+```bash
+# Disparar coleta manual imediata
+curl -X POST -H "X-API-Key: <sua-chave>" http://localhost:8000/v1/calculos/coletar
+
+# Consultar status da última coleta
+curl -H "X-API-Key: <sua-chave>" http://localhost:8000/v1/calculos/coletar/status
+```
+
+---
+
+### 12. Módulo Web de Laudos e Lead Magnet (Painel PHP na Porta 8080)
+Além dos endpoints REST em Go, a plataforma web fornece interfaces integradas:
+* **`GET /` ou `GET /calculadora`:** Calculadora judicial pública com captação de leads.
+* **`POST /calculadora/emitir-laudo`:** Salva o cálculo, dados do lead e gera o Hash SHA-256 e UUID.
+* **`GET /laudo/{uuid}/imprimir`:** Visualização formatada em folha A4 com QR Code de autenticidade para petição ou impressão em PDF.
+* **`GET /validar/{uuid}`:** Selo público de autenticidade digital (acessível via câmera do celular apontada para o QR Code do laudo).
+
+---
+
 ## Capítulo 07: Tabela de Erros Canônicos e Estratégia de Retry
 
 Todos os erros retornados pela API seguem um **envelope padronizado e previsível**. Seu código cliente deve sempre validar a chave `codigo`, pois a mensagem de texto pode evoluir:
