@@ -1,0 +1,65 @@
+# ==============================================================================
+# REST Client para VS Code — Robô Jurídico API (Go + Laravel Filament)
+# ==============================================================================
+# Instruções:
+# 1. Instale a extensão "REST Client" (por Huachao Mao) no VS Code.
+# 2. Substitua o valor da variável @chave abaixo pela chave copiada no Portal ou Admin.
+# 3. Clique em "Send Request" que aparece logo acima de cada método HTTP.
+# ==============================================================================
+
+@base = http://localhost:8000
+@chave = rj_live_SUA_CHAVE_AQUI
+
+### 1. Healthcheck da API (Livre, sem chave)
+GET {{base}}/saude
+Accept: application/json
+
+### 2. Especificação OpenAPI JSON (Livre, sem chave)
+GET {{base}}/openapi.json
+Accept: application/json
+
+### 3. Minha Conta e Saldo de Cota (Grátis, requer chave)
+GET {{base}}/v1/conta
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 4. Decodificação Matemática e Validação de CNJ (Grátis, requer chave)
+GET {{base}}/v1/cnj/5010754-07.2024.8.13.0625
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 5. Checagem Rápida de Existência de Processo (Grátis, requer chave)
+GET {{base}}/v1/processos/5010754-07.2024.8.13.0625/existe
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 6. Consulta Completa de Processo — DataJud + DJEN (Consome 1 cota)
+GET {{base}}/v1/processos/5010754-07.2024.8.13.0625
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 7. Consulta Rápida de Processo — Apenas Diário DJEN (Consome 1 cota)
+GET {{base}}/v1/processos/5010754-07.2024.8.13.0625?modo=rapido
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 8. Consulta de Processo via POST com Body JSON (Consome 1 cota)
+POST {{base}}/v1/processos/consultar
+Authorization: Bearer {{chave}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "numero_processo": "5010754-07.2024.8.13.0625",
+  "modo": "completo"
+}
+
+### 9. Publicações do Diário Oficial por OAB — Controle de Prazos (Consome 1 cota)
+GET {{base}}/v1/oab/MG/123456/publicacoes?dias=7&paginas=1
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 10. Processos Publicados por OAB no Período (Consome 1 cota)
+GET {{base}}/v1/oab/MG/123456/processos?dias=30&tribunal=TJMG
+X-API-Key: {{chave}}
+Accept: application/json
