@@ -16,7 +16,9 @@ class Cliente extends Authenticatable implements FilamentUser, HasName
     use HasFactory, Notifiable;
 
     protected $table = 'clientes';
-    public $timestamps = false;
+    const CREATED_AT = 'criado_em';
+    const UPDATED_AT = 'atualizado_em';
+    public $timestamps = true;
 
     protected $fillable = [
         'nome',

@@ -303,3 +303,82 @@ func TestConsultarProcessoJSON_Validacao(t *testing.T) {
 		t.Fatalf("Esperado 422 para JSON malformado no POST, obtido %d", wBad.Code)
 	}
 }
+
+func TestRotasCalculoJudicial(t *testing.T) {
+	roteador := setupRoteadorTeste()
+
+	// 1. GET /v1/calculos/indices
+	reqIndices := httptest.NewRequest("GET", "/v1/calculos/indices", nil)
+	reqIndices.Header.Set("X-API-Key", chaveTesteValida)
+	wIndices := httptest.NewRecorder()
+	roteador.ServeHTTP(wIndices, reqIndices)
+
+	if wIndices.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em /v1/calculos/indices, obtido %d", wIndices.Code)
+	}
+
+	var resIndices map[string]any
+	if err := json.Unmarshal(wIndices.Body.Bytes(), &resIndices); err != nil {
+		t.Fatalf("Erro ao decodificar JSON dos indices: %v", err)
+	}
+	if resIndices["ok"] != true {
+		t.Errorf("Esperado ok=true em indices: %v", resIndices)
+	}
+
+	// 2. GET /v1/calculos/indices/TJSP/serie
+	reqSerie := httptest.NewRequest("GET", "/v1/calculos/indices/TJSP/serie", nil)
+	reqSerie.Header.Set("X-API-Key", chaveTesteValida)
+	wSerie := httptest.NewRecorder()
+	roteador.ServeHTTP(wSerie, reqSerie)
+
+	if wSerie.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em /v1/calculos/indices/TJSP/serie, obtido %d", wSerie.Code)
+	}
+
+	// 3. POST /v1/calculos/judicial
+	payload := `{
+		"data_atualizacao": "2026-10-14",
+		"indexador_codigo": "TJSP",
+		"aplicar_deflacao": true,
+		"juros_mora": {
+			"tipo": "CONVENCIONAL_MENSAL",
+			"percentual_mensal": 1.0,
+			"modo": "COMPOSTO",
+			"aplicar_prorata_die": true
+		},
+		"fase_execucao": {
+			"aplicar_art_523_multa": true,
+			"aplicar_art_523_honorarios": true,
+			"multa_moratoria_percentual": 10.0
+		},
+		"parcelas": [
+			{
+				"numero_item": 1,
+				"descricao": "Parcela Inicial",
+				"tipo": "DEBITO",
+				"data_vencimento": "2023-01-15",
+				"valor_original": 10000.00
+			}
+		]
+	}`
+
+	reqCalc := httptest.NewRequest("POST", "/v1/calculos/judicial", strings.NewReader(payload))
+	reqCalc.Header.Set("Content-Type", "application/json")
+	reqCalc.Header.Set("X-API-Key", chaveTesteValida)
+	wCalc := httptest.NewRecorder()
+	roteador.ServeHTTP(wCalc, reqCalc)
+
+	if wCalc.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em /v1/calculos/judicial, obtido %d: %s", wCalc.Code, wCalc.Body.String())
+	}
+
+	var resCalc map[string]any
+	if err := json.Unmarshal(wCalc.Body.Bytes(), &resCalc); err != nil {
+		t.Fatalf("Erro ao decodificar JSON de calculo judicial: %v", err)
+	}
+
+	if resCalc["sucesso"] != true {
+		t.Errorf("Esperado sucesso=true no calculo: %v", resCalc)
+	}
+}
+

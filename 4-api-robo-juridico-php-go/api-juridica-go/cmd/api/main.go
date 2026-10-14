@@ -15,6 +15,8 @@ import (
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/configs"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/auth"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/cache"
+	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/calculator"
+	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/calculator/collectors"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/fontes/comunica"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/fontes/datajud"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/network"
@@ -81,8 +83,21 @@ func main() {
 	servicoAuth := auth.NovoServicoAuth(db, cfg.ChavesInternas, cfg.LimitePadraoRPM)
 	log.Printf("[INFO] Servico de autenticacao pronto com %d chaves internas configuradas", len(cfg.ChavesInternas))
 
-	// 6. Camada HTTP e Rotas
-	handlers := transporthttp.NovosHandlers(orquestrador, db, "1.0.0")
+	// 6. Motor de Cálculos Judiciais e Índices Econômicos
+	calcRepo := calculator.NovoRepositorioIndices()
+	calcEngine := calculator.NovoEngineCalculo(calcRepo)
+
+	// Worker Agendado Diário / Mensal (Bacen, IBGE, Tribunais)
+	workerColetor := collectors.NovoWorker(calcRepo, 24*time.Hour)
+	ctxWorker, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	workerColetor.Iniciar(ctxWorker)
+
+	log.Printf("[INFO] Motor de calculos judiciais ativado com %d indices e worker agendado", len(calcRepo.ListarIndices()))
+
+	// 7. Camada HTTP e Rotas
+	handlers := transporthttp.NovosHandlers(orquestrador, db, "1.0.0", calcEngine)
+	handlers.SetWorkerColetor(workerColetor)
 	router := transporthttp.NovoRoteador(handlers, servicoAuth, db)
 
 	endereco := fmt.Sprintf("%s:%s", cfg.Host, cfg.Porta)

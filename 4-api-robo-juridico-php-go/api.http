@@ -63,3 +63,103 @@ Accept: application/json
 GET {{base}}/v1/oab/MG/123456/processos?dias=30&tribunal=TJMG
 X-API-Key: {{chave}}
 Accept: application/json
+
+### 11. Listar Índices e Séries Disponíveis (Grátis, requer chave)
+GET {{base}}/v1/calculos/indices
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 12. Obter Série Histórica de um Índice (Grátis, requer chave)
+GET {{base}}/v1/calculos/indices/TJSP/serie
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 13. Executar Liquidação de Débito Judicial (Padrão TJSP + Juros + Art. 523 CPC)
+POST {{base}}/v1/calculos/judicial
+X-API-Key: {{chave}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "numero_processo": "1002345-67.2023.8.26.0100",
+  "data_atualizacao": "2026-10-14",
+  "indexador_codigo": "TJSP",
+  "aplicar_deflacao": true,
+  "juros_mora": {
+    "tipo": "CONVENCIONAL_MENSAL",
+    "percentual_mensal": 1.0,
+    "modo": "COMPOSTO",
+    "aplicar_prorata_die": true
+  },
+  "fase_execucao": {
+    "aplicar_art_523_multa": true,
+    "aplicar_art_523_honorarios": true,
+    "multa_moratoria_percentual": 10.0
+  },
+  "parcelas": [
+    {
+      "numero_item": 1,
+      "descricao": "Parcela Inicial de Débito",
+      "tipo": "DEBITO",
+      "data_vencimento": "2023-01-15",
+      "valor_original": 10000.00
+    },
+    {
+      "numero_item": 2,
+      "descricao": "Custas Iniciais",
+      "tipo": "CUSTA_PROCESSUAL",
+      "data_vencimento": "2023-01-20",
+      "valor_original": 350.00
+    }
+  ]
+}
+
+### 14. Liquidação Judicial pela Nova Lei 14.905/2024 (IPCA + Taxa Legal Bacen)
+POST {{base}}/v1/calculos/judicial
+X-API-Key: {{chave}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "numero_processo": "5010754-07.2024.8.13.0625",
+  "data_atualizacao": "2026-10-14",
+  "indexador_codigo": "IPCA",
+  "aplicar_deflacao": true,
+  "juros_mora": {
+    "tipo": "TAXA_LEGAL",
+    "percentual_mensal": 1.0,
+    "modo": "SIMPLES",
+    "aplicar_prorata_die": true
+  },
+  "fase_execucao": {
+    "aplicar_art_523_multa": true,
+    "aplicar_art_523_honorarios": true
+  },
+  "parcelas": [
+    {
+      "numero_item": 1,
+      "descricao": "Danos Morais e Materiais",
+      "tipo": "DEBITO",
+      "data_vencimento": "2024-02-15",
+      "valor_original": 25000.00
+    },
+    {
+      "numero_item": 2,
+      "descricao": "Amortização Espontânea Parcial",
+      "tipo": "PAGAMENTO_PARCIAL",
+      "data_vencimento": "2025-05-10",
+      "valor_original": -5000.00
+    }
+  ]
+}
+
+### 15. Disparar Coleta / Sincronização Manual dos Índices (Bacen, IBGE, Tribunais)
+POST {{base}}/v1/calculos/coletar
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 16. Consultar Status do Worker de Coleta de Índices
+GET {{base}}/v1/calculos/coletar/status
+X-API-Key: {{chave}}
+Accept: application/json
+

@@ -295,6 +295,159 @@
           "401": { "$ref": "#/components/responses/NaoAutorizado" }
         }
       }
+    },
+    "/v1/calculos/indices": {
+      "get": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Listagem de Índices e Séries Econômicas",
+        "description": "Retorna todos os indexadores cadastrados (TJSP, IPCA, INPC, SELIC, Taxa Legal Lei 14.905/2024).",
+        "responses": {
+          "200": {
+            "description": "Lista de índices econômicos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true },
+                    "indices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "codigo": { "type": "string", "example": "TJSP" },
+                          "nome": { "type": "string", "example": "Tabela Prática TJSP" },
+                          "fonte": { "type": "string", "example": "Tribunal de Justiça de SP" },
+                          "periodicidade": { "type": "string", "example": "MENSAL" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/calculos/judicial": {
+      "post": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Liquidação Completa de Débitos e Créditos Judiciais",
+        "description": "Aplica correção monetária, juros moratórios (tradicionais ou Lei 14.905/2024), custas processuais, pagamentos parciais (art. 354 CC) e encargos da execução (Art. 523 CPC e Art. 85 CPC).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["data_atualizacao", "indexador_codigo", "parcelas"],
+                "properties": {
+                  "numero_processo": { "type": "string", "example": "1002345-67.2023.8.26.0100" },
+                  "data_atualizacao": { "type": "string", "example": "2026-10-14" },
+                  "indexador_codigo": { "type": "string", "example": "TJSP" },
+                  "aplicar_deflacao": { "type": "boolean", "example": true },
+                  "juros_mora": {
+                    "type": "object",
+                    "properties": {
+                      "tipo": { "type": "string", "enum": ["CONVENCIONAL_MENSAL", "TAXA_LEGAL", "SELIC", "SEM_JUROS"], "example": "CONVENCIONAL_MENSAL" },
+                      "percentual_mensal": { "type": "number", "example": 1.0 },
+                      "modo": { "type": "string", "enum": ["SIMPLES", "COMPOSTO"], "example": "COMPOSTO" },
+                      "aplicar_prorata_die": { "type": "boolean", "example": true }
+                    }
+                  },
+                  "fase_execucao": {
+                    "type": "object",
+                    "properties": {
+                      "aplicar_art_523_multa": { "type": "boolean", "example": true },
+                      "aplicar_art_523_honorarios": { "type": "boolean", "example": true },
+                      "multa_moratoria_percentual": { "type": "number", "example": 10.0 }
+                    }
+                  },
+                  "parcelas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["tipo", "data_vencimento", "valor_original"],
+                      "properties": {
+                        "descricao": { "type": "string", "example": "Dano Material" },
+                        "tipo": { "type": "string", "enum": ["DEBITO", "CUSTA_PROCESSUAL", "DESPESA_PROCESSUAL", "PAGAMENTO_PARCIAL"], "example": "DEBITO" },
+                        "data_vencimento": { "type": "string", "example": "2023-01-15" },
+                        "valor_original": { "type": "number", "example": 10000.00 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cálculo judicial realizado com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sucesso": { "type": "boolean", "example": true },
+                    "resumo": { "type": "object" },
+                    "itens_liquidados": { "type": "array" }
+                  }
+                }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/RequisicaoInvalida" }
+        }
+      }
+    },
+    "/v1/calculos/coletar": {
+      "post": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Dispara Coleta e Sincronização de Índices (Bacen, IBGE, Tribunais)",
+        "description": "Aciona manualmente o robô coletor para atualizar as séries de inflação, Selic e tabelas dos Tribunais de Justiça.",
+        "responses": {
+          "200": {
+            "description": "Relatório da sincronização executada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true },
+                    "relatorio": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/calculos/coletar/status": {
+      "get": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Status do Worker Agendado de Coleta",
+        "description": "Retorna o status da última execução, se está em execução no momento e timestamp.",
+        "responses": {
+          "200": {
+            "description": "Status do worker de coleta.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true },
+                    "em_execucao": { "type": "boolean", "example": false },
+                    "ultima_execucao": { "type": "string", "example": "2026-10-14T17:00:00Z" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

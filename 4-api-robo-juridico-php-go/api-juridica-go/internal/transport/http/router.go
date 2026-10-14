@@ -40,6 +40,11 @@ func NovoRoteador(handlers *Handlers, servicoAuth *auth.ServicoAuth, db storage.
 			sub.Get(prefixo+"/cnj/{numero}", handlers.DecodificarCNJ)
 			sub.Get(prefixo+"/processos/{numero}/existe", handlers.ProcessoExiste)
 			sub.Get(prefixo+"/conta", handlers.Conta)
+			sub.Get(prefixo+"/calculos/indices", handlers.ListarIndices)
+			sub.Get(prefixo+"/calculos/indices/{codigo}/serie", handlers.ObterSerieIndice)
+			sub.Get(prefixo+"/calculos/coletar/status", handlers.StatusColeta)
+			sub.Post(prefixo+"/calculos/coletar", handlers.SincronizarIndices)
+			sub.Post(prefixo+"/calculos/importar-planilha", handlers.ImportarPlanilha)
 		})
 
 		// Rotas autenticadas COM dedução de cota (cobrar)
@@ -50,6 +55,7 @@ func NovoRoteador(handlers *Handlers, servicoAuth *auth.ServicoAuth, db storage.
 			sub.Post(prefixo+"/processos/consultar", handlers.ConsultarProcessoJSON)
 			sub.Get(prefixo+"/oab/{uf}/{numero}/processos", handlers.OABProcessos)
 			sub.Get(prefixo+"/oab/{uf}/{numero}/publicacoes", handlers.OABPublicacoes)
+			sub.Post(prefixo+"/calculos/judicial", handlers.CalcularJudicial)
 		})
 	}
 

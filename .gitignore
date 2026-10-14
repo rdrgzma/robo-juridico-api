@@ -31,3 +31,11 @@ dados/
 .idea/
 .DS_Store
 Thumbs.db
+
+# PHP / Composer / Laravel
+vendor/
+node_modules/
+.phpunit.result.cache
+storage/framework/
+storage/logs/
+bootstrap/cache/

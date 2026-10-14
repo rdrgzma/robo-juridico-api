@@ -4,12 +4,15 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/calculator"
+	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/calculator/collectors"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/cnj"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/domain"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/service"
@@ -68,18 +71,31 @@ var ufsValidas = map[string]bool{
 type Handlers struct {
 	orquestrador *service.Orquestrador
 	database     storage.BancoDados
+	calcEngine   *calculator.EngineCalculo
+	worker       *collectors.WorkerColetor
 	versao       string
 }
 
-func NovosHandlers(orq *service.Orquestrador, db storage.BancoDados, versao string) *Handlers {
+func NovosHandlers(orq *service.Orquestrador, db storage.BancoDados, versao string, calcEngine ...*calculator.EngineCalculo) *Handlers {
 	if versao == "" {
 		versao = "1.0.0"
+	}
+	var engine *calculator.EngineCalculo
+	if len(calcEngine) > 0 && calcEngine[0] != nil {
+		engine = calcEngine[0]
+	} else {
+		engine = calculator.NovoEngineCalculo(nil)
 	}
 	return &Handlers{
 		orquestrador: orq,
 		database:     db,
+		calcEngine:   engine,
 		versao:       versao,
 	}
+}
+
+func (h *Handlers) SetWorkerColetor(w *collectors.WorkerColetor) {
+	h.worker = w
 }
 
 // Saude verifica se a API está online (/saude)
@@ -453,3 +469,131 @@ func (h *Handlers) Conta(w http.ResponseWriter, r *http.Request) {
 		LimitePorMinuto: identidade.LimitePorMinuto,
 	})
 }
+
+// ListarIndices retorna a relação de indexadores cadastrados (/v1/calculos/indices)
+func (h *Handlers) ListarIndices(w http.ResponseWriter, r *http.Request) {
+	indices := h.calcEngine.Repositorio().ListarIndices()
+	JSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"indices": indices,
+	})
+}
+
+// ObterSerieIndice retorna os pontos históricos de um índice específico (/v1/calculos/indices/{codigo}/serie)
+func (h *Handlers) ObterSerieIndice(w http.ResponseWriter, r *http.Request) {
+	codigo := chi.URLParam(r, "codigo")
+	serie, err := h.calcEngine.Repositorio().ObterSerieCompleta(strings.ToUpper(codigo))
+	if err != nil {
+		EnviarErro(w, r, http.StatusNotFound, "indice_nao_encontrado", fmt.Sprintf("Índice '%s' não encontrado.", codigo))
+		return
+	}
+	JSON(w, http.StatusOK, map[string]any{
+		"ok":     true,
+		"codigo": strings.ToUpper(codigo),
+		"serie":  serie,
+	})
+}
+
+// CalcularJudicial executa a liquidação judicial completa de débitos/créditos (/v1/calculos/judicial)
+func (h *Handlers) CalcularJudicial(w http.ResponseWriter, r *http.Request) {
+	var req calculator.CalculoJudicialRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		EnviarErro(w, r, http.StatusBadRequest, "requisicao_invalida", "Corpo da requisição JSON inválido ou malformado.")
+		return
+	}
+
+	resp, err := h.calcEngine.Executar(req)
+	if err != nil {
+		EnviarErro(w, r, http.StatusUnprocessableEntity, "erro_calculo", err.Error())
+		return
+	}
+
+	JSON(w, http.StatusOK, resp)
+}
+
+// SincronizarIndices aciona manualmente a coleta de índices do Bacen, IBGE e Tribunais (/v1/calculos/coletar)
+func (h *Handlers) SincronizarIndices(w http.ResponseWriter, r *http.Request) {
+	if h.worker == nil {
+		EnviarErro(w, r, http.StatusServiceUnavailable, "worker_nao_disponivel", "Worker de coleta não configurado.")
+		return
+	}
+
+	rel := h.worker.Executar(r.Context())
+	JSON(w, http.StatusOK, map[string]any{
+		"ok":        true,
+		"relatorio": rel,
+	})
+}
+
+// StatusColeta retorna o status da última rotina de coleta (/v1/calculos/coletar/status)
+func (h *Handlers) StatusColeta(w http.ResponseWriter, r *http.Request) {
+	if h.worker == nil {
+		EnviarErro(w, r, http.StatusServiceUnavailable, "worker_nao_disponivel", "Worker de coleta não configurado.")
+		return
+	}
+
+	rel, ultima, emExec := h.worker.UltimoRelatorio()
+	var ultimaStr string
+	if !ultima.IsZero() {
+		ultimaStr = ultima.Format(time.RFC3339)
+	}
+
+	JSON(w, http.StatusOK, map[string]any{
+		"ok":               true,
+		"em_execucao":      emExec,
+		"ultima_execucao":  ultimaStr,
+		"ultimo_relatorio": rel,
+	})
+}
+
+// ImportarPlanilha extrai parcelas de arquivos Excel (.xlsx), CSV (.csv) ou texto colado (/v1/calculos/importar-planilha)
+func (h *Handlers) ImportarPlanilha(w http.ResponseWriter, r *http.Request) {
+	nomeArquivo := "planilha.csv"
+	var conteudo []byte
+
+	// 1. Tenta multipart form
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := r.ParseMultipartForm(10 << 20); err == nil { // Max 10MB
+			file, header, err := r.FormFile("planilha")
+			if err != nil {
+				file, header, err = r.FormFile("arquivo")
+			}
+			if err == nil {
+				defer file.Close()
+				nomeArquivo = header.Filename
+				conteudo, _ = io.ReadAll(file)
+			}
+		}
+	}
+
+	// 2. Fallback para corpo raw ou texto colado
+	if len(conteudo) == 0 {
+		if fn := r.Header.Get("X-Filename"); fn != "" {
+			nomeArquivo = fn
+		} else if fn := r.URL.Query().Get("arquivo"); fn != "" {
+			nomeArquivo = fn
+		}
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil || len(bodyBytes) == 0 {
+			EnviarErro(w, r, http.StatusBadRequest, "arquivo_vazio", "Nenhum arquivo ou texto enviado para importação.")
+			return
+		}
+		conteudo = bodyBytes
+	}
+
+	parcelas, err := calculator.ImportarPlanilha(nomeArquivo, conteudo)
+	if err != nil {
+		EnviarErro(w, r, http.StatusUnprocessableEntity, "erro_importacao", err.Error())
+		return
+	}
+
+	JSON(w, http.StatusOK, map[string]any{
+		"ok":             true,
+		"total_parcelas": len(parcelas),
+		"arquivo":        nomeArquivo,
+		"parcelas":       parcelas,
+	})
+}
+
+
+
