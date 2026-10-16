@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\CalculoJudicialService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 class PublicCalculadoraController extends Controller
@@ -35,7 +36,10 @@ class PublicCalculadoraController extends Controller
             'data_atualizacao' => 'required|date',
             'indexador_codigo' => 'required|string',
             'aplicar_deflacao' => 'nullable|boolean',
+            'aplicar_prorata_correcao' => 'nullable|boolean',
+            'imputar_art_354_cc' => 'nullable|boolean',
             'juros_mora' => 'nullable|array',
+            'juros_compensatorios' => 'nullable|array',
             'fase_execucao' => 'nullable|array',
             'parcelas' => 'required|array|min:1',
             'parcelas.*.data_vencimento' => 'required|date',
@@ -47,6 +51,20 @@ class PublicCalculadoraController extends Controller
         $resultado = $this->service->calcular($dados);
 
         return response()->json($resultado);
+    }
+
+    /**
+     * Liquidação em 1 Clique: identifica Tribunal, indexador oficial e dados de autuação a partir do número CNJ
+     */
+    public function identificarProcesso(Request $request): JsonResponse
+    {
+        $request->validate([
+            'numero_processo' => 'required|string|min:15',
+        ]);
+
+        $info = $this->service->autocompletarPorProcesso($request->input('numero_processo'));
+
+        return response()->json($info, !empty($info['ok']) ? 200 : 422);
     }
 
     /**
@@ -66,6 +84,62 @@ class PublicCalculadoraController extends Controller
         }
 
         return response()->json($resultado);
+    }
+
+    /**
+     * Exporta a memória de cálculo liquidada para Excel (.xlsx) ou CSV (.csv)
+     */
+    public function exportarPlanilha(Request $request): Response
+    {
+        $formato = strtolower($request->query('formato', $request->input('formato', 'xlsx')));
+        $dados = $request->input('resultado') ?: $request->all();
+
+        $conteudo = $this->service->exportarPlanilha($dados, $formato);
+        if (!$conteudo) {
+            abort(422, 'Não foi possível exportar a memória de cálculo.');
+        }
+
+        if ($formato === 'csv') {
+            return response($conteudo, 200, [
+                'Content-Type' => 'text/csv; charset=utf-8',
+                'Content-Disposition' => 'attachment; filename="memoria-calculo-judicial.csv"',
+            ]);
+        }
+
+        return response($conteudo, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="memoria-calculo-judicial.xlsx"',
+        ]);
+    }
+
+    /**
+     * Exporta diretamente um Laudo Certificado salvo por UUID para Excel (.xlsx) ou CSV (.csv)
+     */
+    public function exportarLaudoSalvo(Request $request, string $uuid): Response
+    {
+        $calculo = $this->service->buscarPorUuid($uuid);
+        if (!$calculo) {
+            abort(404, 'Laudo Pericial não encontrado.');
+        }
+
+        $formato = strtolower($request->query('formato', 'xlsx'));
+        $conteudo = $this->service->exportarPlanilha($calculo->resultado_json ?? [], $formato);
+        if (!$conteudo) {
+            abort(422, 'Não foi possível exportar a planilha deste laudo.');
+        }
+
+        $prefixo = substr($calculo->uuid, 0, 8);
+        if ($formato === 'csv') {
+            return response($conteudo, 200, [
+                'Content-Type' => 'text/csv; charset=utf-8',
+                'Content-Disposition' => "attachment; filename=\"laudo-{$prefixo}.csv\"",
+            ]);
+        }
+
+        return response($conteudo, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"laudo-{$prefixo}.xlsx\"",
+        ]);
     }
 
     /**

@@ -15,8 +15,10 @@ import (
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/calculator/collectors"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/cnj"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/domain"
+	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/prazos"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/service"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/storage"
+	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/webhooks"
 )
 
 //go:embed openapi.json
@@ -73,6 +75,7 @@ type Handlers struct {
 	database     storage.BancoDados
 	calcEngine   *calculator.EngineCalculo
 	worker       *collectors.WorkerColetor
+	webhooks     *webhooks.GerenciadorWebhooks
 	versao       string
 }
 
@@ -90,6 +93,7 @@ func NovosHandlers(orq *service.Orquestrador, db storage.BancoDados, versao stri
 		orquestrador: orq,
 		database:     db,
 		calcEngine:   engine,
+		webhooks:     webhooks.NovoGerenciadorWebhooks(),
 		versao:       versao,
 	}
 }
@@ -595,5 +599,198 @@ func (h *Handlers) ImportarPlanilha(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// CalcularFinanciamento executa a revisão contratual bancária nos sistemas Price, SAC ou Gauss (/v1/calculos/financiamento)
+func (h *Handlers) CalcularFinanciamento(w http.ResponseWriter, r *http.Request) {
+	var req calculator.CalculoFinanciamentoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		EnviarErro(w, r, http.StatusBadRequest, "requisicao_invalida", "Corpo da requisição JSON inválido ou malformado.")
+		return
+	}
 
+	resp, err := calculator.CalcularRevisaoFinanciamento(req)
+	if err != nil {
+		EnviarErro(w, r, http.StatusUnprocessableEntity, "erro_calculo_financiamento", err.Error())
+		return
+	}
 
+	JSON(w, http.StatusOK, resp)
+}
+
+// ExportarPlanilha gera e retorna arquivo Excel (.xlsx) ou CSV (.csv) da memória de cálculo (/v1/calculos/exportar-planilha)
+func (h *Handlers) ExportarPlanilha(w http.ResponseWriter, r *http.Request) {
+	formato := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("formato")))
+	if formato == "" {
+		formato = "xlsx"
+	}
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil || len(bodyBytes) == 0 {
+		EnviarErro(w, r, http.StatusBadRequest, "requisicao_invalida", "Envie o JSON do cálculo judicial ou os parâmetros das parcelas.")
+		return
+	}
+
+	// Aceita tanto um CalculoJudicialResponse pronto quanto um CalculoJudicialRequest para calcular na hora
+	var respCalculo *calculator.CalculoJudicialResponse
+	var jaCalculado calculator.CalculoJudicialResponse
+	if err := json.Unmarshal(bodyBytes, &jaCalculado); err == nil && (len(jaCalculado.ItensLiquidados) > 0 || len(jaCalculado.Itens) > 0) {
+		respCalculo = &jaCalculado
+	} else {
+		var reqCalculo calculator.CalculoJudicialRequest
+		if err := json.Unmarshal(bodyBytes, &reqCalculo); err != nil {
+			EnviarErro(w, r, http.StatusBadRequest, "requisicao_invalida", "JSON inválido para exportação de planilha.")
+			return
+		}
+		calculado, err := h.calcEngine.Executar(reqCalculo)
+		if err != nil {
+			EnviarErro(w, r, http.StatusUnprocessableEntity, "erro_calculo", err.Error())
+			return
+		}
+		respCalculo = calculado
+	}
+
+	if formato == "csv" {
+		csvBytes, err := calculator.ExportarMemoriaCSV(respCalculo)
+		if err != nil {
+			EnviarErro(w, r, http.StatusInternalServerError, "erro_exportacao", err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="memoria-calculo-judicial.csv"`)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(csvBytes)
+		return
+	}
+
+	xlsxBytes, err := calculator.ExportarMemoriaXLSX(respCalculo)
+	if err != nil {
+		EnviarErro(w, r, http.StatusInternalServerError, "erro_exportacao", err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="memoria-calculo-judicial.xlsx"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(xlsxBytes)
+}
+
+// CalcularPrazo executa a contagem de prazos processuais fatais conforme CPC/2015 e CLT (/v1/prazos/calcular)
+func (h *Handlers) CalcularPrazo(w http.ResponseWriter, r *http.Request) {
+	var req prazos.CalculoPrazoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		EnviarErro(w, r, http.StatusBadRequest, "requisicao_invalida", "Corpo da requisição JSON inválido.")
+		return
+	}
+
+	resp, err := prazos.CalcularPrazoProcessual(req)
+	if err != nil {
+		EnviarErro(w, r, http.StatusUnprocessableEntity, "erro_calculo_prazo", err.Error())
+		return
+	}
+
+	JSON(w, http.StatusOK, resp)
+}
+
+// ListarFeriados retorna os feriados nacionais e forenses de um determinado ano (/v1/prazos/feriados)
+func (h *Handlers) ListarFeriados(w http.ResponseWriter, r *http.Request) {
+	ano := time.Now().Year()
+	if anoStr := r.URL.Query().Get("ano"); anoStr != "" {
+		if v, err := strconv.Atoi(anoStr); err == nil && v >= 1990 && v <= 2100 {
+			ano = v
+		}
+	}
+
+	feriados := prazos.ListarFeriadosAno(ano)
+	JSON(w, http.StatusOK, map[string]any{
+		"ok":       true,
+		"ano":      ano,
+		"feriados": feriados,
+	})
+}
+
+// ListarWebhooks lista as inscrições de monitoramento Push ativas do cliente (/v1/webhooks)
+func (h *Handlers) ListarWebhooks(w http.ResponseWriter, r *http.Request) {
+	clienteID := 0
+	if id := ObterIdentidade(r); id != nil {
+		clienteID = id.ClienteID
+	}
+
+	lista := h.webhooks.Listar(clienteID)
+	JSON(w, http.StatusOK, map[string]any{
+		"ok":       true,
+		"total":    len(lista),
+		"webhooks": lista,
+	})
+}
+
+// RegistrarWebhook cadastra um novo webhook para monitoramento de OAB ou Processo CNJ (/v1/webhooks)
+func (h *Handlers) RegistrarWebhook(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TipoAlvo   string   `json:"tipo_alvo"`
+		Alvo       string   `json:"alvo"`
+		URLDestino string   `json:"url_destino"`
+		Segredo    string   `json:"segredo"`
+		Eventos    []string `json:"eventos"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		EnviarErro(w, r, http.StatusBadRequest, "requisicao_invalida", "Corpo JSON inválido.")
+		return
+	}
+
+	clienteID := 0
+	if id := ObterIdentidade(r); id != nil {
+		clienteID = id.ClienteID
+	}
+
+	sub, err := h.webhooks.Registrar(clienteID, body.TipoAlvo, body.Alvo, body.URLDestino, body.Segredo, body.Eventos)
+	if err != nil {
+		EnviarErro(w, r, http.StatusUnprocessableEntity, "webhook_invalido", err.Error())
+		return
+	}
+
+	JSON(w, http.StatusCreated, map[string]any{
+		"ok":      true,
+		"webhook": sub,
+	})
+}
+
+// RemoverWebhook exclui uma inscrição de webhook (/v1/webhooks/{id})
+func (h *Handlers) RemoverWebhook(w http.ResponseWriter, r *http.Request) {
+	idWebhook := chi.URLParam(r, "id")
+	clienteID := 0
+	if id := ObterIdentidade(r); id != nil {
+		clienteID = id.ClienteID
+	}
+
+	if !h.webhooks.Remover(clienteID, idWebhook) {
+		EnviarErro(w, r, http.StatusNotFound, "webhook_nao_encontrado", "Inscrição de webhook não encontrada.")
+		return
+	}
+
+	JSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"removido": idWebhook,
+	})
+}
+
+// TestarWebhook gera e assina (HMAC-SHA256) um payload de evento de teste (/v1/webhooks/testar)
+func (h *Handlers) TestarWebhook(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URLDestino string `json:"url_destino"`
+		Segredo    string `json:"segredo"`
+		Evento     string `json:"evento"`
+		Alvo       string `json:"alvo"`
+		EnviarHTTP bool   `json:"enviar_http"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	evt, statusHTTP, err := h.webhooks.DispararTeste(r.Context(), body.URLDestino, body.Segredo, body.Evento, body.Alvo, body.EnviarHTTP)
+	if err != nil {
+		EnviarErro(w, r, http.StatusBadGateway, "falha_envio_webhook", err.Error())
+		return
+	}
+
+	JSON(w, http.StatusOK, map[string]any{
+		"ok":          true,
+		"status_http": statusHTTP,
+		"payload":     evt,
+	})
+}

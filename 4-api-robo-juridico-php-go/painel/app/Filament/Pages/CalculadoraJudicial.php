@@ -75,17 +75,36 @@ class CalculadoraJudicial extends Page implements HasForms
                                 ->placeholder('0000000-00.0000.0.00.0000')
                                 ->suffixAction(
                                     \Filament\Forms\Components\Actions\Action::make('identificar')
-                                        ->icon('heroicon-m-magnifying-glass')
-                                        ->tooltip('Identificar Tribunal')
-                                        ->action(function ($state, CalculoJudicialService $service) {
+                                        ->icon('heroicon-m-sparkles')
+                                        ->tooltip('Auto-Preencher Tribunal e Dados pelo CNJ (1-Click)')
+                                        ->action(function ($state, CalculoJudicialService $service, \Filament\Forms\Set $set, \Filament\Forms\Get $get) {
                                             if (empty($state)) return;
-                                            $info = $service->decodificarCNJ($state);
-                                            if ($info && !empty($info['tribunal'])) {
+                                            $info = $service->autocompletarPorProcesso($state);
+                                            if (!empty($info['ok'])) {
                                                 $this->dadosProcesso = $info;
+                                                $set('numero_processo', $info['numero_formatado']);
+                                                if (!empty($info['indexador_sugerido'])) {
+                                                    $set('indexador_codigo', $info['indexador_sugerido']);
+                                                }
+                                                $parcelasAtuais = $get('parcelas') ?? [];
+                                                if (count($parcelasAtuais) <= 1) {
+                                                    $set('parcelas', [[
+                                                        'descricao' => $info['descricao_sugerida'] ?? 'Valor Principal da Condenação',
+                                                        'tipo' => 'DEBITO',
+                                                        'data_vencimento' => $info['data_sugerida'] ?? now()->subYear()->format('Y-m-d'),
+                                                        'valor_original' => $info['valor_sugerido'] ?? ($parcelasAtuais[0]['valor_original'] ?? 10000.00),
+                                                    ]]);
+                                                }
                                                 Notification::make()
-                                                    ->title("Tribunal Identificado: {$info['tribunal']}")
-                                                    ->body("Segmento: {$info['segmento']} | Ano: {$info['ano']}")
+                                                    ->title("Processo Identificado ({$info['tribunal']})")
+                                                    ->body("Indexador ajustado para {$info['indexador_sugerido']} | Segmento: {$info['segmento']}")
                                                     ->success()
+                                                    ->send();
+                                            } else {
+                                                Notification::make()
+                                                    ->title('Número CNJ Inválido')
+                                                    ->body($info['mensagem'] ?? 'Verifique a numeração informada.')
+                                                    ->warning()
                                                     ->send();
                                             }
                                         })
@@ -137,12 +156,20 @@ class CalculadoraJudicial extends Page implements HasForms
                                 ->required()
                                 ->default(now()->format('Y-m-d')),
                         ]),
-                        Toggle::make('aplicar_deflacao')
-                            ->label('Aplicar Deflação (Permitir redução do valor quando inflação negativa)')
-                            ->default(false),
+                        Grid::make(3)->schema([
+                            Toggle::make('aplicar_deflacao')
+                                ->label('Aplicar Deflação (Inflação negativa)')
+                                ->default(false),
+                            Toggle::make('aplicar_prorata_correcao')
+                                ->label('Correção Monetária Pro Rata Die')
+                                ->default(false),
+                            Toggle::make('imputar_art_354_cc')
+                                ->label('Imputação Art. 354 CC (Abater Juros Primeiro)')
+                                ->default(false),
+                        ]),
                     ]),
 
-                Section::make('Parâmetros de Juros Moratórios e Execução')
+                Section::make('Parâmetros de Juros Moratórios, Compensatórios e Execução')
                     ->collapsible()
                     ->schema([
                         Grid::make(4)->schema([
@@ -237,6 +264,8 @@ class CalculadoraJudicial extends Page implements HasForms
             'data_atualizacao' => $dadosForm['data_atualizacao'],
             'indexador_codigo' => $dadosForm['indexador_codigo'],
             'aplicar_deflacao' => (bool)($dadosForm['aplicar_deflacao'] ?? false),
+            'aplicar_prorata_correcao' => (bool)($dadosForm['aplicar_prorata_correcao'] ?? false),
+            'imputar_art_354_cc' => (bool)($dadosForm['imputar_art_354_cc'] ?? false),
             'juros_mora' => [
                 'tipo' => $dadosForm['juros_tipo'],
                 'percentual_mensal' => (float)($dadosForm['juros_percentual'] ?? 1.0),
@@ -294,17 +323,38 @@ class CalculadoraJudicial extends Page implements HasForms
         }
 
         $dadosForm = $this->form->getState();
+        $user = auth()->user() ?? auth()->guard('cliente')->user();
         $calculo = $service->salvarCalculoComLead(
             $dadosForm,
             $this->resultado,
             [
-                'nome' => auth()->user()->name ?? 'Operador do Painel',
-                'email' => auth()->user()->email ?? '',
+                'nome' => $user->name ?? $user->nome ?? 'Operador do Painel',
+                'email' => $user->email ?? '',
                 'oab' => 'Painel Oficial',
             ]
         );
 
         return redirect()->route('laudo.imprimir', $calculo->uuid);
+    }
+
+    public function exportarExcel(CalculoJudicialService $service)
+    {
+        if (empty($this->resultado)) {
+            Notification::make()->title('Execute o cálculo primeiro.')->warning()->send();
+            return null;
+        }
+
+        $conteudo = $service->exportarPlanilha($this->resultado, 'xlsx');
+        if (!$conteudo) {
+            Notification::make()->title('Erro ao gerar planilha Excel.')->danger()->send();
+            return null;
+        }
+
+        return response()->streamDownload(function () use ($conteudo) {
+            echo $conteudo;
+        }, 'memoria-calculo-judicial.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
     }
 
     protected function getHeaderActions(): array
@@ -346,8 +396,8 @@ class CalculadoraJudicial extends Page implements HasForms
                         foreach ($resultadoImportacao['parcelas'] as $p) {
                             $novasParcelas[] = [
                                 'descricao' => $p['descricao'] ?? 'Parcela Importada',
-                                'tipo' => 'DEBITO',
-                                'data_vencimento' => $p['data'] ?? now()->format('Y-m-d'),
+                                'tipo' => $p['tipo'] ?? 'DEBITO',
+                                'data_vencimento' => $p['data_vencimento'] ?? $p['data'] ?? now()->format('Y-m-d'),
                                 'valor_original' => (float)($p['valor_original'] ?? 0),
                             ];
                         }
@@ -369,6 +419,13 @@ class CalculadoraJudicial extends Page implements HasForms
                             ->send();
                     }
                 }),
+
+            Action::make('exportarExcel')
+                ->label('Exportar Excel (.xlsx)')
+                ->icon('heroicon-o-table-cells')
+                ->color('info')
+                ->visible(fn () => !empty($this->resultado))
+                ->action(fn (CalculoJudicialService $service) => $this->exportarExcel($service)),
 
             Action::make('emitirLaudo')
                 ->label('Emitir Laudo Certificado (PDF)')

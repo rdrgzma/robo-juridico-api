@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Models\CalculoSalvo;
 use App\Models\Cliente;
 use App\Models\Uso;
 use Carbon\Carbon;
@@ -23,6 +24,7 @@ class StatsOverviewWidget extends BaseWidget
         $bloqueiosCota = Uso::where('status', 402)
             ->where('momento', '>=', $inicioMes)
             ->count();
+        $totalLeads = CalculoSalvo::count();
 
         return [
             Stat::make('Consultas no Mês', number_format($totalConsultasMes, 0, ',', '.'))
@@ -40,10 +42,10 @@ class StatsOverviewWidget extends BaseWidget
                 ->descriptionIcon('heroicon-m-banknotes')
                 ->color('warning'),
 
-            Stat::make('Bloqueios por Cota (402)', $bloqueiosCota)
-                ->description('Consultas excedentes barradas no mês')
-                ->descriptionIcon('heroicon-m-shield-exclamation')
-                ->color($bloqueiosCota > 0 ? 'danger' : 'gray'),
+            Stat::make('Laudos & Leads (CRM)', $totalLeads)
+                ->description($bloqueiosCota > 0 ? "{$bloqueiosCota} bloqueios de cota (402)" : 'Capturados na Calculadora Pública')
+                ->descriptionIcon('heroicon-m-document-check')
+                ->color('info'),
         ];
     }
 }

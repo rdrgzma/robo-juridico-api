@@ -3,6 +3,7 @@ package calculator
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -19,7 +20,7 @@ type RepositorioIndices struct {
 	mu      sync.RWMutex
 	indices map[string]IndiceInfo
 	// series: map[codigo_indice]map[ano_mes_string]PontoSerie, ex: "2024-01"
-	series  map[string]map[string]PontoSerie
+	series map[string]map[string]PontoSerie
 }
 
 func NovoRepositorioIndices() *RepositorioIndices {
@@ -66,6 +67,7 @@ func (r *RepositorioIndices) AdicionarPonto(codigoIndice string, dataRef time.Ti
 
 // ObterIndice retorna as informações cadastrais do índice
 func (r *RepositorioIndices) ObterIndice(codigo string) (IndiceInfo, error) {
+	codigo = NormalizarCodigoIndice(codigo)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	info, ok := r.indices[codigo]
@@ -75,7 +77,7 @@ func (r *RepositorioIndices) ObterIndice(codigo string) (IndiceInfo, error) {
 	return info, nil
 }
 
-// ListarIndices retorna a lista de todos os índices disponíveis
+// ListarIndices retorna a lista ordenada de todos os índices disponíveis
 func (r *RepositorioIndices) ListarIndices() []IndiceInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -84,11 +86,15 @@ func (r *RepositorioIndices) ListarIndices() []IndiceInfo {
 	for _, info := range r.indices {
 		lista = append(lista, info)
 	}
+	sort.Slice(lista, func(i, j int) bool {
+		return lista[i].Codigo < lista[j].Codigo
+	})
 	return lista
 }
 
 // ObterPonto busca o registro específico de um mês
 func (r *RepositorioIndices) ObterPonto(codigo string, data time.Time) (PontoSerie, error) {
+	codigo = NormalizarCodigoIndice(codigo)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -107,9 +113,13 @@ func (r *RepositorioIndices) ObterPonto(codigo string, data time.Time) (PontoSer
 }
 
 // ObterFatorAcumulado calcula o fator de correção entre duas datas
-// Fator = NumeroIndice(DataFim) / NumeroIndice(DataInicio)
-// Caso deflação seja desativada, calcula via produtório das variações mensais não-negativas
 func (r *RepositorioIndices) ObterFatorAcumulado(codigo string, dataInicio, dataFim time.Time, permitirDeflacao bool) (decimal.Decimal, error) {
+	return r.ObterFatorAcumuladoComOpcoes(codigo, dataInicio, dataFim, permitirDeflacao, false)
+}
+
+// ObterFatorAcumuladoComOpcoes calcula o fator de correção entre duas datas com suporte a pro rata die opcional
+func (r *RepositorioIndices) ObterFatorAcumuladoComOpcoes(codigo string, dataInicio, dataFim time.Time, permitirDeflacao, aplicarProRata bool) (decimal.Decimal, error) {
+	codigo = NormalizarCodigoIndice(codigo)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -118,7 +128,6 @@ func (r *RepositorioIndices) ObterFatorAcumulado(codigo string, dataInicio, data
 		return decimal.NewFromInt(1), fmt.Errorf("%w: %s", ErrIndiceNaoEncontrado, codigo)
 	}
 
-	// Se dataInicio >= dataFim, fator é 1.0 (sem correção)
 	if !dataInicio.Before(dataFim) {
 		return decimal.NewFromInt(1), nil
 	}
@@ -131,28 +140,54 @@ func (r *RepositorioIndices) ObterFatorAcumulado(codigo string, dataInicio, data
 			ErrDataForaDaSerie, dataInicio.Format("2006-01"), dataFim.Format("2006-01"), codigo)
 	}
 
-	// 1. Caso com deflação permitida e número-índice presente: quociente direto
-	if permitirDeflacao && !pontoInicio.NumeroIndice.IsZero() && !pontoFim.NumeroIndice.IsZero() {
+	// 1. Caso com deflação permitida, sem pro-rata fracionado e número-índice presente: quociente direto
+	if permitirDeflacao && !aplicarProRata && !pontoInicio.NumeroIndice.IsZero() && !pontoFim.NumeroIndice.IsZero() {
 		return pontoFim.NumeroIndice.DivRound(pontoInicio.NumeroIndice, 10), nil
 	}
 
-	// 2. Caso sem deflação (ou sem número-índice): produtório mês a mês
+	// 2. Caso sem deflação, sem número-índice ou com pro rata die na correção monetária
 	fatorTotal := decimal.NewFromInt(1)
-	cursor := time.Date(dataInicio.Year(), dataInicio.Month()+1, 1, 0, 0, 0, 0, time.UTC)
-	fim := time.Date(dataFim.Year(), dataFim.Month(), 1, 0, 0, 0, 0, time.UTC)
+	cento := decimal.NewFromInt(100)
+	trinta := decimal.NewFromInt(30)
 
-	for !cursor.After(fim) {
+	// Se aplicarProRata estiver ativo, aplica fração proporcional de dias no mês inicial
+	if aplicarProRata {
+		diasMesInicial := 30 - dataInicio.Day() + 1
+		if diasMesInicial < 1 {
+			diasMesInicial = 1
+		}
+		varInicial := pontoInicio.ValorPercentual
+		if !permitirDeflacao && varInicial.IsNegative() {
+			varInicial = decimal.Zero
+		}
+		proporcaoIni := decimal.NewFromInt(int64(diasMesInicial)).Div(trinta)
+		fatorIni := decimal.NewFromInt(1).Add(varInicial.Mul(proporcaoIni).Div(cento))
+		fatorTotal = fatorTotal.Mul(fatorIni)
+	}
+
+	cursor := time.Date(dataInicio.Year(), dataInicio.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+	fimMes := time.Date(dataFim.Year(), dataFim.Month(), 1, 0, 0, 0, 0, time.UTC)
+
+	for !cursor.After(fimMes) {
 		chave := cursor.Format("2006-01")
 		ponto, ok := serie[chave]
 		if ok {
-			var variacao decimal.Decimal
-			if !permitirDeflacao && ponto.ValorPercentual.IsNegative() {
-				variacao = decimal.Zero // Trava deflação em 0%
-			} else {
-				variacao = ponto.ValorPercentual
+			variacao := ponto.ValorPercentual
+			if !permitirDeflacao && variacao.IsNegative() {
+				variacao = decimal.Zero
 			}
 
-			fatorMes := decimal.NewFromInt(1).Add(variacao.Div(decimal.NewFromInt(100)))
+			// Se for o último mês e aplicarProRata estiver ativo, proporcionaliza pelos dias corridos do mês final
+			if aplicarProRata && cursor.Equal(fimMes) {
+				diasFim := dataFim.Day()
+				if diasFim > 30 {
+					diasFim = 30
+				}
+				proporcaoFim := decimal.NewFromInt(int64(diasFim)).Div(trinta)
+				variacao = variacao.Mul(proporcaoFim)
+			}
+
+			fatorMes := decimal.NewFromInt(1).Add(variacao.Div(cento))
 			fatorTotal = fatorTotal.Mul(fatorMes)
 		}
 		cursor = cursor.AddDate(0, 1, 0)
@@ -161,8 +196,9 @@ func (r *RepositorioIndices) ObterFatorAcumulado(codigo string, dataInicio, data
 	return fatorTotal.Round(10), nil
 }
 
-// ObterSerieCompleta retorna todos os pontos ordenados para exibição
+// ObterSerieCompleta retorna todos os pontos ordenados cronologicamente para exibição
 func (r *RepositorioIndices) ObterSerieCompleta(codigo string) ([]PontoSerie, error) {
+	codigo = NormalizarCodigoIndice(codigo)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -175,5 +211,8 @@ func (r *RepositorioIndices) ObterSerieCompleta(codigo string) ([]PontoSerie, er
 	for _, p := range serie {
 		lista = append(lista, p)
 	}
+	sort.Slice(lista, func(i, j int) bool {
+		return lista[i].DataReferenciaTexto < lista[j].DataReferenciaTexto
+	})
 	return lista, nil
 }

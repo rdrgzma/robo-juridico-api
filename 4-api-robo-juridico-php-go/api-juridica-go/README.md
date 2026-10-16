@@ -14,9 +14,12 @@ Esta API consulta e consolida processos judiciais nas fontes oficiais do Poder J
 - **Cache Anti-Thundering Herd:** TTL em memória com sincronização via `golang.org/x/sync/singleflight` para evitar requisições duplicadas concorrentes para o mesmo número de processo.
 - **Proxy Pool Residencial:** Rotação e disparo concorrente (*race*) em múltiplos proxies HTTP/SOCKS5 para contornar bloqueios do DJEN.
 - **Proteção & Cotas:** Autenticação por SHA-256 (`X-API-Key`), rate limiting deslizante em memória e reserva atômica de cota mensal com estorno em caso de falha $\ge 400$.
-- **Motor de Liquidação Judicial (Paridade DrCalc):** Precisão arbitrária com `decimal.Decimal`, conformidade plena com a **Lei 14.905/2024** ($\max(0, \text{Selic} - \text{IPCA})$), juros com pro rata die diário e fase de execução (Art. 523 CPC 10%+10%).
-- **Worker Coletor Automático Bacen/IBGE:** Sincronização automática contínua de índices econômicos (SGS Bacen, SIDRA IBGE) e mais de 26 tabelas oficiais de Tribunais Estaduais, Federais e do Trabalho.
-- **Importador Nativo de Planilhas:** Parser em Go para `.xlsx`, `.csv`, `.tsv` e linhas coladas do clipboard sem bibliotecas externas de C.
+- **Motor de Liquidação Judicial (Paridade DrCalc / PJe-Calc):** Precisão arbitrária com `decimal.Decimal`, conformidade plena com a **Lei 14.905/2024** ($\max(0, \text{Selic} - \text{IPCA})$), juros moratórios e compensatórios/remuneratórios com *pro rata die* diário, correção monetária *pro rata die* linear, imputação pelo **Art. 354 do Código Civil** e fase de execução (Art. 523 CPC 10%+10%).
+- **Revisão de Contratos Bancários (`PRICE`, `SAC` e `GAUSS`):** Comparativo contratado vs. mercado com expurgo de anatocismo e apuração de repetição de indébito simples e em dobro (Art. 42 CDC).
+- **Calculadora de Prazos Processuais Fatais (CPC/2015 e CLT):** Apuração de publicação no DJe, início de contagem e vencimento fatal em dias úteis ou corridos (Art. 219 e 224 CPC), recesso forense (Art. 220 CPC) e feriados móveis (Páscoa, Carnaval, Corpus Christi).
+- **Monitoramento Push via Webhooks (`HMAC-SHA256`):** Cadastro e disparo assinado de notificações push para processos CNJ e inscrições OAB.
+- **Worker Coletor Automático Bacen/IBGE:** Sincronização automática contínua de índices econômicos (SGS Bacen, SIDRA IBGE, janela de 60 meses) e 27 tabelas oficiais de Tribunais Estaduais, Federais e do Trabalho.
+- **Importador e Exportador Nativo de Planilhas:** Parser e gerador nativos em Go para `.xlsx` (OpenXML) e `.csv` sem bibliotecas externas de C.
 
 ---
 
@@ -36,18 +39,20 @@ api-juridica-go/
 │   │   └── cache.go               # Cache TTL em memória com singleflight
 │   ├── calculator/
 │   │   ├── collectors/
-│   │   │   ├── bacen.go           # Coletor Bacen SGS (Selic, CDI, TR, Poupança, IGP-M, etc.)
-│   │   │   ├── ibge.go            # Coletor IBGE SIDRA (IPCA, INPC, IPCA-15)
-│   │   │   ├── tribunais.go       # Sincronizador de 26+ tabelas de tribunais (TJSP, TJRJ, TRF, TST)
+│   │   │   ├── bacen.go           # Coletor Bacen SGS (Selic, CDI, TR, Poupança, IGP-M, etc. - 60 meses)
+│   │   │   ├── ibge.go            # Coletor IBGE SIDRA (IPCA, INPC, IPCA-15 - 60 meses)
+│   │   │   ├── tribunais.go       # Sincronizador de 27 tabelas de tribunais (TJSP, TJRJ, TRF, TST)
 │   │   │   └── worker.go          # Daemon de coleta automática diária (ticker 24h)
-│   │   ├── correction.go          # Motor de correção monetária (fatores acumulados e deflação)
-│   │   ├── engine.go              # Orquestrador contábil da liquidação judicial
+│   │   ├── correction.go          # Motor de correção monetária (fatores acumulados, pro rata e deflação)
+│   │   ├── engine.go              # Orquestrador contábil da liquidação judicial (inclui Art. 354 CC)
+│   │   ├── exporter.go            # Exportador nativo de memória de cálculo em .xlsx e .csv
+│   │   ├── financing.go           # Motor de revisão bancária (PRICE, SAC, GAUSS e Art. 42 CDC)
 │   │   ├── importer.go            # Importador nativo de planilhas Excel (.xlsx) e CSV
-│   │   ├── interest.go            # Motor de juros de mora (Simples, Composto, Lei 14.905, Pro Rata)
+│   │   ├── interest.go            # Motor de juros moratórios e compensatórios (Lei 14.905, Pro Rata)
 │   │   ├── models.go              # Modelos de domínio com precisão arbitrária decimal.Decimal
 │   │   ├── penalties.go           # Multas moratórias, honorários e encargos do Art. 523 CPC
 │   │   ├── repository.go          # Repositório thread-safe de índices e séries temporais
-│   │   └── seed.go                # Carga inicial com séries históricas oficiais
+│   │   └── seed.go                # Carga inicial histórica (2023-2026) para todos os 27 índices
 │   ├── cnj/
 │   │   ├── cnj.go                 # Validador módulo 97 com big.Int, formatação e metadados
 │   │   └── cnj_test.go            # Testes unitários do validador CNJ
@@ -66,18 +71,22 @@ api-juridica-go/
 │   ├── network/
 │   │   ├── httpclient.go          # Cliente HTTP com pool de conexões e rotação de User-Agents
 │   │   └── proxy_pool.go          # Pool de proxies com disparo concorrente
+│   ├── prazos/
+│   │   └── prazos.go              # Calculadora de prazos processuais (CPC Art. 224, CLT Art. 775 e feriados)
 │   ├── service/
 │   │   └── orchestrator.go        # Orquestrador de fontes, unificação e ordenação cronológica
 │   ├── storage/
 │   │   ├── database.go            # Interface de persistência e cálculo de períodos (BRT)
 │   │   └── sqlite.go              # Driver SQLite puro (WAL, reservas atômicas de cotas)
-│   └── transport/
-│       └── http/
-│           ├── handlers.go        # Handlers HTTP de todas as rotas (processos e cálculos)
-│           ├── handlers_test.go   # Testes automatizados da camada HTTP
-│           ├── middleware.go      # Middlewares de auditoria, Request-ID, segurança e cotas
-│           ├── response.go        # Padronização de respostas JSON e envelopes de erro
-│           └── router.go          # Roteador Chi v5 com rotas públicas e autenticadas
+│   ├── transport/
+│   │   └── http/
+│   │       ├── handlers.go        # Handlers HTTP de todas as rotas (processos, cálculos, prazos, webhooks)
+│   │       ├── handlers_test.go   # Testes automatizados da camada HTTP
+│   │       ├── middleware.go      # Middlewares de auditoria, Request-ID, segurança e cotas
+│   │       ├── response.go        # Padronização de respostas JSON e envelopes de erro
+│   │       └── router.go          # Roteador Chi v5 com rotas públicas e autenticadas
+│   └── webhooks/
+│       └── webhooks.go            # Gerenciador de webhooks push com assinatura HMAC-SHA256
 ├── Dockerfile                     # Multi-stage build otimizado (Alpine 3.21)
 ├── docker-compose.yml             # Orquestração local do container
 └── go.mod                         # Definição do módulo Go
@@ -95,20 +104,29 @@ api-juridica-go/
 | `GET` | `/v1/cnj/{numero}` | Sim (`X-API-Key`) | Não | Valida e decodifica o número CNJ sem consultar fontes externas |
 | `GET` | `/v1/processos/{numero}/existe` | Sim (`X-API-Key`) | Não | Checagem rápida de existência no DataJud ou DJEN |
 | `GET` | `/v1/processos/{numero}` | Sim (`X-API-Key`) | **Sim (1)** | Consulta completa consolidada (DataJud + DJEN) ou `modo=rapido` |
+| `POST` | `/v1/processos/consultar` | Sim (`X-API-Key`) | **Sim (1)** | Consulta consolidada via payload JSON |
 | `GET` | `/v1/oab/{uf}/{numero}/processos` | Sim (`X-API-Key`) | **Sim (1)** | Processos com publicações da OAB no período informado |
 | `GET` | `/v1/oab/{uf}/{numero}/publicacoes` | Sim (`X-API-Key`) | **Sim (1)** | Diário oficial na íntegra para controle de prazos |
 | `GET` | `/v1/conta` | Sim (`X-API-Key`) | Não | Consulta plano, cota mensal usada/restante e data de renovação |
 
-### Módulo de Cálculos e Liquidação Judicial (Paridade DrCalc)
+### Módulo de Cálculos Judiciais, Revisão Bancária, Prazos e Webhooks
 
 | Método | Rota | Autenticação | Custo de Cota | Descrição |
 |---|---|---|---|---|
-| `GET` | `/v1/calculos/indices` | Sim (`X-API-Key`) | Não | Lista todos os 26+ indexadores econômicos e tabelas dos tribunais |
+| `GET` | `/v1/calculos/indices` | Sim (`X-API-Key`) | Não | Lista todos os 27 indexadores econômicos e tabelas dos tribunais |
 | `GET` | `/v1/calculos/indices/{codigo}/serie` | Sim (`X-API-Key`) | Não | Retorna a série histórica mensal completa do índice solicitado |
-| `POST` | `/v1/calculos/judicial` | Sim (`X-API-Key`) | Não | Executa liquidação completa de débito (correção, juros, multas e Art. 523 CPC) |
-| `POST` | `/v1/calculos/importar-planilha` | Sim (`X-API-Key`) | Não | Extrai parcelas de arquivo Excel (.xlsx), CSV (.csv) ou linhas de texto |
+| `POST` | `/v1/calculos/judicial` | Sim (`X-API-Key`) | Não | Executa liquidação completa de débito (correção, juros, Art. 354 CC e Art. 523 CPC) |
+| `POST` | `/v1/calculos/financiamento` | Sim (`X-API-Key`) | Não | Revisão de contratos bancários (`PRICE`, `SAC`, `GAUSS` e Art. 42 CDC) |
+| `POST` | `/v1/calculos/importar-planilha` | Sim (`X-API-Key`) | Não | Extrai parcelas de arquivo Excel (`.xlsx`), CSV (`.csv`) ou linhas de texto |
+| `POST` | `/v1/calculos/exportar-planilha` | Sim (`X-API-Key`) | Não | Exporta memória de cálculo liquidada em `.xlsx` ou `.csv` |
 | `POST` | `/v1/calculos/coletar` | Sim (`X-API-Key`) | Não | Dispara imediatamente a rotina de coleta no Bacen (SGS) e IBGE (SIDRA) |
 | `GET` | `/v1/calculos/coletar/status` | Sim (`X-API-Key`) | Não | Retorna o status e relatório da última coleta automática de índices |
+| `POST` | `/v1/prazos/calcular` | Sim (`X-API-Key`) | Não | Calcula prazos processuais fatais (CPC/2015 Art. 224 e CLT Art. 775) |
+| `GET` | `/v1/prazos/feriados` | Sim (`X-API-Key`) | Não | Lista feriados nacionais, móveis e forenses do ano |
+| `GET` | `/v1/webhooks` | Sim (`X-API-Key`) | Não | Lista webhooks de monitoramento push cadastrados |
+| `POST` | `/v1/webhooks` | Sim (`X-API-Key`) | Não | Registra novo webhook de monitoramento de processo ou OAB |
+| `DELETE` | `/v1/webhooks/{id}` | Sim (`X-API-Key`) | Não | Remove um webhook cadastrado |
+| `POST` | `/v1/webhooks/testar` | Sim (`X-API-Key`) | Não | Simula disparo de evento push com assinatura `HMAC-SHA256` |
 
 ---
 

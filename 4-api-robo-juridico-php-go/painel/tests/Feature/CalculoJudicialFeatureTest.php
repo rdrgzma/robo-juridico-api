@@ -98,4 +98,73 @@ class CalculoJudicialFeatureTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('Autenticidade Não Confirmada');
     }
+
+    public function test_compatibilidade_contrato_go_itens_liquidados_e_datas_br(): void
+    {
+        $payloadCalculo = [
+            'numero_processo' => '5053283-30.2024.8.13.0079',
+            'data_atualizacao' => '2026-10-14',
+            'indexador_codigo' => 'TJMG',
+        ];
+
+        // Simula o formato nativo do Go (itens_liquidados, total_geral_devido e data DD/MM/AAAA)
+        $resultadoGoNativo = [
+            'sucesso' => true,
+            'resumo' => [
+                'total_geral_devido' => 12450.80,
+                'total_principal_corrigido' => 10500.00,
+                'total_juros_mora' => 1950.80,
+            ],
+            'itens_liquidados' => [
+                [
+                    'numero_item' => 1,
+                    'descricao' => 'Condenação TJMG',
+                    'data_vencimento' => '15/01/2024',
+                    'valor_original' => 10000.00,
+                    'fator_correcao' => 1.05,
+                    'valor_corrigido' => 10500.00,
+                    'valor_juros_mora' => 1950.80,
+                    'valor_multa_moratoria' => 0.0,
+                    'total_item' => 12450.80,
+                ],
+            ],
+            'notas_metodologicas' => ['Atualizado pela Tabela da CGJ-MG'],
+        ];
+
+        $service = app(CalculoJudicialService::class);
+        $salvo = $service->salvarCalculoComLead($payloadCalculo, $resultadoGoNativo, [
+            'nome' => 'Dr. João Perito',
+            'email' => 'joao@pericia.com.br',
+            'whatsapp' => '31988887777',
+            'oab' => 'OAB/MG 100.200',
+        ]);
+
+        $this->assertEquals(12450.80, (float) $salvo->total_geral);
+        $this->assertEquals('novo', $salvo->status_lead);
+
+        // Impressão do laudo não pode quebrar com data no formato DD/MM/AAAA
+        $respLaudo = $this->get("/laudo/{$salvo->uuid}/imprimir");
+        $respLaudo->assertStatus(200);
+        $respLaudo->assertSee('12.450,80');
+        $respLaudo->assertSee('15/01/2024');
+
+        // Validação pública deve confirmar integridade
+        $verificacao = $service->verificarAutenticidade($salvo->uuid);
+        $this->assertTrue($verificacao['valido']);
+    }
+
+    public function test_gerador_qrcode_svg_nativo_e_mapeamento_tribunal(): void
+    {
+        $service = app(CalculoJudicialService::class);
+        $dataUri = $service->gerarQrCodeDataUri('https://robojuridico.com.br/validar/teste-uuid');
+
+        $this->assertStringStartsWith('data:image/svg+xml;base64,', $dataUri);
+        $svgDecoded = base64_decode(substr($dataUri, strlen('data:image/svg+xml;base64,')));
+        $this->assertStringContainsString('<svg', $svgDecoded);
+        $this->assertStringContainsString('<rect', $svgDecoded);
+
+        $this->assertEquals('TJMG', $service->mapearTribunalParaIndexador('TJMG'));
+        $this->assertEquals('JF_GERAL', $service->mapearTribunalParaIndexador('TRF1'));
+        $this->assertEquals('TST_TRABALHISTA', $service->mapearTribunalParaIndexador('TRT3'));
+    }
 }

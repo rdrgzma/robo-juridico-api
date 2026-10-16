@@ -6,6 +6,7 @@ use App\Models\CalculoSalvo;
 use chillerlan\QRCode\QRCode;
 use chillerlan\QRCode\QROptions;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -39,7 +40,7 @@ class CalculoJudicialService
                 return $response->json();
             }
 
-            $erro = $response->json('detalhe') ?? $response->json('mensagem') ?? $response->body();
+            $erro = $response->json('erro.mensagem') ?? $response->json('detalhe') ?? $response->json('mensagem') ?? $response->body();
             return [
                 'sucesso' => false,
                 'mensagem' => "Falha no cálculo ({$response->status()}): {$erro}",
@@ -91,7 +92,7 @@ class CalculoJudicialService
                 return $response->json();
             }
 
-            $erro = $response->json('detalhe') ?? $response->json('mensagem') ?? $response->body();
+            $erro = $response->json('erro.mensagem') ?? $response->json('detalhe') ?? $response->json('mensagem') ?? $response->body();
             return [
                 'ok' => false,
                 'mensagem' => "Erro ao importar planilha ({$response->status()}): {$erro}",
@@ -106,41 +107,133 @@ class CalculoJudicialService
     }
 
     /**
-     * Salva o cálculo realizado vinculando ao Lead e gerando hash criptográfico de autenticidade
+     * Exporta a memória de cálculo liquidada para planilha Excel (.xlsx) ou CSV (.csv)
+     */
+    public function exportarPlanilha(array $dadosOuResultado, string $formato = 'xlsx'): ?string
+    {
+        try {
+            $formato = strtolower(trim($formato)) === 'csv' ? 'csv' : 'xlsx';
+            $response = Http::timeout(15)
+                ->withHeaders([
+                    'X-API-Key' => $this->apiKey,
+                    'Content-Type' => 'application/json',
+                ])
+                ->post("{$this->baseUrl}/v1/calculos/exportar-planilha?formato={$formato}", $dadosOuResultado);
+
+            if ($response->successful()) {
+                return $response->body();
+            }
+        } catch (\Throwable $e) {
+            Log::warning("[CALCULO_JUDICIAL] Falha ao exportar planilha: " . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Salva o cálculo realizado vinculando ao Lead/Cliente e gerando hash criptográfico de autenticidade
      */
     public function salvarCalculoComLead(
         array $dadosCalculo,
         array $resultado,
         array $leadData = [],
-        ?string $ipOrigem = null
+        ?string $ipOrigem = null,
+        ?int $clienteId = null
     ): CalculoSalvo {
         $uuid = Str::uuid()->toString();
 
-        // Hash SHA-256 à prova de fraude do resultado e do processo
+        if ($clienteId === null && Auth::guard('cliente')->check()) {
+            $clienteId = (int) Auth::guard('cliente')->id();
+        }
+
+        $totalGeral = (float) ($resultado['resumo']['total_geral']
+            ?? $resultado['resumo']['total_geral_devido']
+            ?? 0);
+        $itensLista = $resultado['itens'] ?? $resultado['itens_liquidados'] ?? [];
+
+        // Garante que o JSON salvo contenha ambas as chaves de compatibilidade
+        $resultado['resumo']['total_geral'] = $totalGeral;
+        $resultado['resumo']['total_geral_devido'] = $totalGeral;
+        $resultado['itens'] = $itensLista;
+        $resultado['itens_liquidados'] = $itensLista;
+
         $hashBase = json_encode([
             'uuid' => $uuid,
             'processo' => $dadosCalculo['numero_processo'] ?? '',
             'data_atualizacao' => $dadosCalculo['data_atualizacao'] ?? '',
-            'total_geral' => $resultado['resumo']['total_geral'] ?? 0,
-            'itens_count' => count($resultado['itens'] ?? []),
+            'total_geral' => $totalGeral,
+            'itens_count' => count($itensLista),
         ]);
         $hashValidacao = hash('sha256', $hashBase . 'ROBO_JURIDICO_SALT_2026');
 
         return CalculoSalvo::create([
+            'cliente_id' => $clienteId,
             'uuid' => $uuid,
             'hash_validacao' => $hashValidacao,
             'numero_processo' => $dadosCalculo['numero_processo'] ?? null,
             'data_atualizacao' => $dadosCalculo['data_atualizacao'] ?? now()->format('Y-m-d'),
             'indexador_codigo' => $dadosCalculo['indexador_codigo'] ?? 'TJSP',
-            'total_geral' => (float)($resultado['resumo']['total_geral'] ?? 0),
+            'total_geral' => $totalGeral,
             'payload_requisicao' => $dadosCalculo,
             'resultado_json' => $resultado,
             'lead_nome' => $leadData['nome'] ?? null,
             'lead_email' => $leadData['email'] ?? null,
             'lead_whatsapp' => $leadData['whatsapp'] ?? null,
             'lead_oab' => $leadData['oab'] ?? null,
+            'status_lead' => $leadData['status_lead'] ?? 'novo',
             'ip_origem' => $ipOrigem ?? request()->ip(),
         ]);
+    }
+
+    /**
+     * Recalcula um cálculo salvo atualizando a data-base para hoje (1-Click Update)
+     */
+    public function atualizarCalculoParaHoje(CalculoSalvo $calculo): ?CalculoSalvo
+    {
+        $payload = $calculo->payload_requisicao ?? [];
+        $payload['data_atualizacao'] = now()->format('Y-m-d');
+
+        // Se o payload veio do formato de formulário do Filament, normaliza para o formato da API Go
+        if (!isset($payload['juros_mora']) && isset($payload['juros_tipo'])) {
+            $payload = [
+                'numero_processo' => $payload['numero_processo'] ?? $calculo->numero_processo,
+                'data_atualizacao' => now()->format('Y-m-d'),
+                'indexador_codigo' => $payload['indexador_codigo'] ?? $calculo->indexador_codigo,
+                'aplicar_deflacao' => (bool)($payload['aplicar_deflacao'] ?? false),
+                'juros_mora' => [
+                    'tipo' => $payload['juros_tipo'] ?? 'CONVENCIONAL_MENSAL',
+                    'percentual_mensal' => (float)($payload['juros_percentual'] ?? 1.0),
+                    'modo' => $payload['juros_modo'] ?? 'SIMPLES',
+                    'aplicar_prorata_die' => (bool)($payload['juros_prorata'] ?? true),
+                ],
+                'fase_execucao' => [
+                    'aplicar_art_523_multa' => (bool)($payload['aplicar_art_523_multa'] ?? false),
+                    'aplicar_art_523_honorarios' => (bool)($payload['aplicar_art_523_honorarios'] ?? false),
+                    'multa_moratoria_percentual' => (float)($payload['multa_moratoria_percentual'] ?? 0.0),
+                    'honorarios_sucumbenciais_percentual' => (float)($payload['honorarios_sucumbenciais_percentual'] ?? 0.0),
+                ],
+                'parcelas' => $payload['parcelas'] ?? [],
+            ];
+        }
+
+        $novoResultado = $this->calcular($payload);
+        if (empty($novoResultado['sucesso'])) {
+            return null;
+        }
+
+        return $this->salvarCalculoComLead(
+            $payload,
+            $novoResultado,
+            [
+                'nome' => $calculo->lead_nome,
+                'email' => $calculo->lead_email,
+                'whatsapp' => $calculo->lead_whatsapp,
+                'oab' => $calculo->lead_oab,
+                'status_lead' => $calculo->status_lead ?? 'novo',
+            ],
+            $calculo->ip_origem,
+            $calculo->cliente_id
+        );
     }
 
     /**
@@ -167,12 +260,17 @@ class CalculoJudicialService
         $dadosCalculo = $calculo->payload_requisicao ?? [];
         $resultado = $calculo->resultado_json ?? [];
 
+        $totalGeral = (float) ($resultado['resumo']['total_geral']
+            ?? $resultado['resumo']['total_geral_devido']
+            ?? 0);
+        $itensLista = $resultado['itens'] ?? $resultado['itens_liquidados'] ?? [];
+
         $hashBase = json_encode([
             'uuid' => $calculo->uuid,
             'processo' => $dadosCalculo['numero_processo'] ?? '',
             'data_atualizacao' => $dadosCalculo['data_atualizacao'] ?? '',
-            'total_geral' => $resultado['resumo']['total_geral'] ?? 0,
-            'itens_count' => count($resultado['itens'] ?? []),
+            'total_geral' => $totalGeral,
+            'itens_count' => count($itensLista),
         ]);
         $hashEsperado = hash('sha256', $hashBase . 'ROBO_JURIDICO_SALT_2026');
 
@@ -193,7 +291,7 @@ class CalculoJudicialService
     }
 
     /**
-     * Gera QR Code em formato Data URI (SVG / PNG base64) para impressão no Laudo Pericial
+     * Gera QR Code em formato Data URI (SVG vetorial real) para impressão no Laudo Pericial
      */
     public function gerarQrCodeDataUri(string $conteudo): string
     {
@@ -212,14 +310,8 @@ class CalculoJudicialService
             Log::warning("[QRCODE] Falha ao gerar via chillerlan: " . $e->getMessage());
         }
 
-        // Fallback dinâmico para renderização de SVG puro embutido
-        return 'data:image/svg+xml;utf8,' . rawurlencode(
-            '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">' .
-            '<rect width="120" height="120" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>' .
-            '<text x="60" y="55" font-size="11" font-family="sans-serif" text-anchor="middle" fill="#1e293b">VALIDAR LAUDO</text>' .
-            '<text x="60" y="75" font-size="9" font-family="sans-serif" text-anchor="middle" fill="#0284c7">QR Code Seguro</text>' .
-            '</svg>'
-        );
+        // Gerador nativo de matriz QR Code em SVG vetorial (zero dependências externas)
+        return QrCodeGenerator::renderDataUri($conteudo, 160);
     }
 
     /**
@@ -266,5 +358,104 @@ class CalculoJudicialService
         }
 
         return null;
+    }
+
+    /**
+     * Liquidação Automática em 1 Clique:
+     * Decodifica o CNJ, mapeia o indexador oficial do Tribunal e busca dados de autuação no DataJud (se disponível)
+     */
+    public function autocompletarPorProcesso(string $numero): array
+    {
+        $cnjInfo = $this->decodificarCNJ($numero);
+        if (!$cnjInfo || empty($cnjInfo['valido'])) {
+            return [
+                'ok' => false,
+                'mensagem' => 'Número de processo CNJ inválido ou dígito verificador incorreto.',
+            ];
+        }
+
+        $tribunal = strtoupper($cnjInfo['tribunal'] ?? '');
+        $indexadorSugerido = $this->mapearTribunalParaIndexador($tribunal);
+        $anoProcesso = (int) ($cnjInfo['ano'] ?? date('Y'));
+        $dataSugerida = sprintf('%04d-01-15', max(2023, min((int)date('Y'), $anoProcesso)));
+        $valorSugerido = null;
+        $descricaoSugerida = "Valor da Causa / Condenação ({$tribunal})";
+        $classeProcessual = null;
+
+        // Tenta consultar metadados rápidos do processo no DataJud (com timeout curto de 4s para não travar a UI)
+        try {
+            $respProc = Http::timeout(4)
+                ->withHeaders(['X-API-Key' => $this->apiKey])
+                ->get("{$this->baseUrl}/v1/processos/" . urlencode($cnjInfo['numero']) . "?modo=rapido&publicacoes=false");
+
+            if ($respProc->successful()) {
+                $proc = $respProc->json('processo') ?? [];
+                if (!empty($proc['data_ajuizamento'])) {
+                    $dtAjuiz = substr($proc['data_ajuizamento'], 0, 10);
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dtAjuiz)) {
+                        $dataSugerida = $dtAjuiz;
+                    }
+                }
+                if (!empty($proc['valor_causa']) && is_numeric($proc['valor_causa'])) {
+                    $valorSugerido = (float) $proc['valor_causa'];
+                }
+                if (!empty($proc['classe'])) {
+                    $classeProcessual = $proc['classe'];
+                    $descricaoSugerida = "{$proc['classe']} ({$tribunal})";
+                }
+            }
+        } catch (\Throwable $e) {
+            // Silencioso: mantém os dados decodificados offline do CNJ
+        }
+
+        return [
+            'ok' => true,
+            'numero_formatado' => $cnjInfo['numero'],
+            'tribunal' => $tribunal,
+            'segmento' => $cnjInfo['segmento'] ?? '',
+            'ano' => $anoProcesso,
+            'indexador_sugerido' => $indexadorSugerido,
+            'data_sugerida' => $dataSugerida,
+            'valor_sugerido' => $valorSugerido,
+            'descricao_sugerida' => $descricaoSugerida,
+            'classe' => $classeProcessual,
+        ];
+    }
+
+    /**
+     * Mapeia a sigla do Tribunal CNJ para o código de indexador correspondente na Calculadora
+     */
+    public function mapearTribunalParaIndexador(string $tribunal): string
+    {
+        $mapaDireto = [
+            'TJSP' => 'TJSP',
+            'TJRJ' => 'TJRJ',
+            'TJMG' => 'TJMG',
+            'TJRS' => 'TJRS',
+            'TJPR' => 'TJPR',
+            'TJSC' => 'TJSC',
+            'TJES' => 'TJES',
+            'TJCE' => 'TJCE',
+            'TJDFT' => 'TJDF',
+            'TJDF' => 'TJDF',
+        ];
+
+        if (isset($mapaDireto[$tribunal])) {
+            return $mapaDireto[$tribunal];
+        }
+
+        if (str_starts_with($tribunal, 'TRF') || $tribunal === 'CJF' || $tribunal === 'STJ') {
+            return 'JF_GERAL';
+        }
+
+        if (str_starts_with($tribunal, 'TRT') || $tribunal === 'TST') {
+            return 'TST_TRABALHISTA';
+        }
+
+        if (str_starts_with($tribunal, 'TJ')) {
+            return 'INPC';
+        }
+
+        return 'IPCA';
     }
 }

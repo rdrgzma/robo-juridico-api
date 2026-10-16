@@ -47,7 +47,7 @@ func (c *ColetorBacenSGS) Nome() string {
 	return "Banco Central do Brasil (SGS)"
 }
 
-// Coletar busca os dados mais recentes de todas as séries cadastradas no Bacen
+// Coletar busca os dados mais recentes de todas as séries cadastradas no Bacen (últimos 60 meses)
 func (c *ColetorBacenSGS) Coletar(ctx context.Context, repo *calculator.RepositorioIndices) (int, error) {
 	totalPontos := 0
 	var ultimoErro error
@@ -59,7 +59,7 @@ func (c *ColetorBacenSGS) Coletar(ctx context.Context, repo *calculator.Reposito
 		default:
 		}
 
-		pontos, err := c.buscarSerieSGS(ctx, codigoSGS, 12) // Últimos 12 meses
+		pontos, err := c.buscarSerieSGS(ctx, codigoSGS, 60) // Últimos 60 meses (5 anos)
 		if err != nil {
 			ultimoErro = fmt.Errorf("erro na serie %s (SGS %d): %w", codigoIndice, codigoSGS, err)
 			continue
@@ -80,6 +80,23 @@ func (c *ColetorBacenSGS) Coletar(ctx context.Context, repo *calculator.Reposito
 
 			repo.AdicionarPonto(codigoIndice, dtMes, val, decimal.Zero)
 			totalPontos++
+
+			// Sincroniza automaticamente as tabelas práticas de Tribunais derivadas de INPC, IPCA e SELIC
+			switch codigoIndice {
+			case "INPC":
+				for _, codTrib := range []string{"TJSP", "TJRJ", "TJMG", "TJMG_EXPURGADA", "TJPR", "TJSC", "TJES", "TJCE", "TJDF", "JF_PREVIDENCIARIO"} {
+					repo.AdicionarPonto(codTrib, dtMes, val, decimal.Zero)
+					totalPontos++
+				}
+			case "IPCA":
+				for _, codTrib := range []string{"TJRS", "TJPR_PRECAT", "JF_GERAL", "JF_DESAPROPRIACAO", "TST_TRABALHISTA"} {
+					repo.AdicionarPonto(codTrib, dtMes, val, decimal.Zero)
+					totalPontos++
+				}
+			case "SELIC":
+				repo.AdicionarPonto("JF_FAZENDA", dtMes, val, decimal.Zero)
+				totalPontos++
+			}
 		}
 	}
 

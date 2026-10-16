@@ -45,6 +45,19 @@ func NovoRoteador(handlers *Handlers, servicoAuth *auth.ServicoAuth, db storage.
 			sub.Get(prefixo+"/calculos/coletar/status", handlers.StatusColeta)
 			sub.Post(prefixo+"/calculos/coletar", handlers.SincronizarIndices)
 			sub.Post(prefixo+"/calculos/importar-planilha", handlers.ImportarPlanilha)
+			sub.Post(prefixo+"/calculos/exportar-planilha", handlers.ExportarPlanilha)
+			sub.Post(prefixo+"/calculos/judicial", handlers.CalcularJudicial)
+			sub.Post(prefixo+"/calculos/financiamento", handlers.CalcularFinanciamento)
+
+			// Prazos Processuais Fatais (CPC/2015 e CLT)
+			sub.Post(prefixo+"/prazos/calcular", handlers.CalcularPrazo)
+			sub.Get(prefixo+"/prazos/feriados", handlers.ListarFeriados)
+
+			// Webhooks de Monitoramento Push (OAB / Processos)
+			sub.Get(prefixo+"/webhooks", handlers.ListarWebhooks)
+			sub.Post(prefixo+"/webhooks", handlers.RegistrarWebhook)
+			sub.Delete(prefixo+"/webhooks/{id}", handlers.RemoverWebhook)
+			sub.Post(prefixo+"/webhooks/testar", handlers.TestarWebhook)
 		})
 
 		// Rotas autenticadas COM dedução de cota (cobrar)
@@ -55,7 +68,6 @@ func NovoRoteador(handlers *Handlers, servicoAuth *auth.ServicoAuth, db storage.
 			sub.Post(prefixo+"/processos/consultar", handlers.ConsultarProcessoJSON)
 			sub.Get(prefixo+"/oab/{uf}/{numero}/processos", handlers.OABProcessos)
 			sub.Get(prefixo+"/oab/{uf}/{numero}/publicacoes", handlers.OABPublicacoes)
-			sub.Post(prefixo+"/calculos/judicial", handlers.CalcularJudicial)
 		})
 	}
 

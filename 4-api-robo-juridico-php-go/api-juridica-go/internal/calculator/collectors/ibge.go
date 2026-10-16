@@ -60,7 +60,7 @@ func (c *ColetorIBGESIDRA) Coletar(ctx context.Context, repo *calculator.Reposit
 		default:
 		}
 
-		pontos, err := c.buscarSerieSIDRA(ctx, cfg.agregado, cfg.variavel, 12)
+		pontos, err := c.buscarSerieSIDRA(ctx, cfg.agregado, cfg.variavel, 60)
 		if err != nil {
 			ultimoErro = fmt.Errorf("erro no IBGE para %s: %w", cfg.codigo, err)
 			continue

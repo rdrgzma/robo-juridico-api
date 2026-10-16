@@ -75,15 +75,18 @@
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                    <!-- Número CNJ -->
+                    <!-- Número CNJ com Liquidação em 1 Clique -->
                     <div>
                         <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                            Processo CNJ (Opcional)
+                            Processo CNJ (Auto-Preenchimento 1-Click)
                         </label>
-                        <div class="relative">
+                        <div class="flex gap-1.5">
                             <input type="text" id="numero_processo" name="numero_processo" placeholder="0000000-00.0000.0.00.0000" class="w-full text-xs font-mono rounded-xl border-slate-300 focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border">
+                            <button type="button" onclick="identificarProcessoCNJ()" title="Identificar Tribunal e Auto-Preencher" class="shrink-0 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all">
+                                Auto
+                            </button>
                         </div>
-                        <span class="text-[10px] text-slate-400 mt-1 block">Insira para registrar no laudo pericial</span>
+                        <span id="statusCNJ" class="text-[10px] text-slate-400 mt-1 block">Identifica automaticamente o Tribunal e indexador</span>
                     </div>
 
                     <!-- Indexador de Correção -->
@@ -116,10 +119,12 @@
                             </optgroup>
                             <optgroup label="Índices Econômicos Oficiais (Bacen / IBGE / FGV)">
                                 <option value="IPCA">IPCA - Índice Geral de Preços ao Consumidor Amplo (IBGE)</option>
+                                <option value="IPCA_15">IPCA-15 - Índice de Preços ao Consumidor Amplo 15 (IBGE)</option>
                                 <option value="INPC">INPC - Índice Nacional de Preços ao Consumidor (IBGE)</option>
                                 <option value="SELIC">SELIC - Taxa Básica Acumulada Mensal (% a.m.)</option>
+                                <option value="CDI">CDI - Certificado de Depósito Interbancário (% a.m.)</option>
                                 <option value="IGPM">IGP-M - Índice Geral de Preços do Mercado (FGV)</option>
-                                <option value="IGPDI">IGP-DI - Índice Geral de Preços - Disp. Interna (FGV)</option>
+                                <option value="IGP_DI">IGP-DI - Índice Geral de Preços - Disp. Interna (FGV)</option>
                                 <option value="INCC">INCC - Índice Nacional de Custo da Construção (FGV)</option>
                                 <option value="TR">TR - Taxa Referencial</option>
                                 <option value="POUPANCA">Poupança - Rendimento Oficial Acumulado (% a.m.)</option>
@@ -143,7 +148,8 @@
                         <label class="block text-xs font-semibold text-slate-700 mb-1">Regra de Juros de Mora</label>
                         <select id="juros_tipo" name="juros_tipo" class="w-full text-xs rounded-xl border-slate-300 p-2.5 border font-medium">
                             <option value="CONVENCIONAL_MENSAL" selected>Percentual Mensal Convencional</option>
-                            <option value="LEI_14905">Nova Taxa Legal (Lei 14.905/2024)</option>
+                            <option value="TAXA_LEGAL">Nova Taxa Legal (Lei 14.905/2024)</option>
+                            <option value="SELIC">Taxa SELIC (Juros + Correção)</option>
                             <option value="SEM_JUROS">Sem Juros de Mora</option>
                         </select>
                     </div>
@@ -161,10 +167,14 @@
                         </select>
                     </div>
 
-                    <div class="flex items-center pt-5">
+                    <div class="flex flex-col justify-center gap-1.5 pt-2">
                         <label class="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
                             <input type="checkbox" id="aplicar_deflacao" name="aplicar_deflacao" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
                             Aplicar Deflação Negativa
+                        </label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                            <input type="checkbox" id="imputar_art_354_cc" name="imputar_art_354_cc" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                            Imputação Art. 354 CC (Abater Juros)
                         </label>
                     </div>
                 </div>
@@ -343,9 +353,14 @@
                         Gere a memória de cálculo formal em formato A4 para juntada processual, acompanhada de <strong>QR Code e Hash SHA-256 de autenticidade pública</strong> que comprova que o cálculo não foi adulterado.
                     </p>
                 </div>
-                <button type="button" onclick="abrirModalLead()" class="shrink-0 px-8 py-3.5 bg-white hover:bg-slate-100 text-slate-900 text-sm font-black rounded-xl shadow-lg hover:shadow-xl transition-all">
-                    BAIXAR LAUDO COM QR CODE &rarr;
-                </button>
+                <div class="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+                    <button type="button" onclick="exportarPlanilhaResultado('xlsx')" class="px-5 py-3.5 bg-emerald-800/60 hover:bg-emerald-800 text-white border border-emerald-400/40 text-xs font-bold rounded-xl shadow transition-all">
+                        Exportar Excel (.xlsx)
+                    </button>
+                    <button type="button" onclick="abrirModalLead()" class="px-8 py-3.5 bg-white hover:bg-slate-100 text-slate-900 text-sm font-black rounded-xl shadow-lg hover:shadow-xl transition-all">
+                        BAIXAR LAUDO COM QR CODE &rarr;
+                    </button>
+                </div>
             </div>
 
             <!-- Tabela Analítica de Itens Liquidados -->
@@ -474,6 +489,47 @@
             box.style.display = (this.value === 'CONVENCIONAL_MENSAL') ? 'block' : 'none';
         });
 
+        async function identificarProcessoCNJ() {
+            const input = document.getElementById('numero_processo');
+            const statusEl = document.getElementById('statusCNJ');
+            const num = input.value.trim();
+            if (!num) {
+                alert('Informe o número do processo no padrão CNJ.');
+                return;
+            }
+            statusEl.textContent = 'Identificando tribunal e dados do processo...';
+            try {
+                const res = await fetch('{{ route('calculadora.identificar-processo') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ numero_processo: num })
+                });
+                const info = await res.json();
+                if (info.ok) {
+                    input.value = info.numero_formatado || num;
+                    if (info.indexador_sugerido) {
+                        document.getElementById('indexador_codigo').value = info.indexador_sugerido;
+                    }
+                    const linhas = document.querySelectorAll('.item-parcela');
+                    if (linhas.length === 1) {
+                        if (info.descricao_sugerida) linhas[0].querySelector('.campo-desc').value = info.descricao_sugerida;
+                        if (info.data_sugerida) linhas[0].querySelector('.campo-data').value = info.data_sugerida;
+                        if (info.valor_sugerido) linhas[0].querySelector('.campo-valor').value = info.valor_sugerido;
+                    }
+                    statusEl.textContent = `Tribunal: ${info.tribunal} (${info.segmento}) • Indexador: ${info.indexador_sugerido}`;
+                    statusEl.className = 'text-[10px] text-emerald-600 font-semibold mt-1 block';
+                } else {
+                    statusEl.textContent = info.mensagem || 'Número CNJ inválido.';
+                    statusEl.className = 'text-[10px] text-rose-600 mt-1 block';
+                }
+            } catch (err) {
+                statusEl.textContent = 'Falha ao consultar CNJ.';
+            }
+        }
+
         function adicionarLinha(dados = {}) {
             const corpo = document.getElementById('corpoParcelas');
             const totalLinhas = corpo.querySelectorAll('.item-parcela').length + 1;
@@ -559,6 +615,7 @@
                 indexador_codigo: document.getElementById('indexador_codigo').value,
                 data_atualizacao: document.getElementById('data_atualizacao').value,
                 aplicar_deflacao: document.getElementById('aplicar_deflacao').checked,
+                imputar_art_354_cc: document.getElementById('imputar_art_354_cc') ? document.getElementById('imputar_art_354_cc').checked : false,
                 juros_mora: {
                     tipo: document.getElementById('juros_tipo').value,
                     percentual_mensal: parseFloat(document.getElementById('juros_percentual').value || 1.0),
@@ -608,17 +665,25 @@
             document.getElementById('secaoResultados').classList.remove('hidden');
 
             const resumo = res.resumo || {};
+            const totalJuros = Number(resumo.total_juros ?? resumo.total_juros_mora ?? 0);
+            const totalMultas = Number(resumo.total_multas ?? ((Number(resumo.total_multa_moratoria || 0)) + (Number(resumo.multa_art_523_cpc || 0))));
+            const totalHon = Number(resumo.total_honorarios ?? ((Number(resumo.honorarios_art_523_cpc || 0)) + (Number(resumo.honorarios_sucumbenciais || 0))));
+            const totalGeral = Number(resumo.total_geral ?? resumo.total_geral_devido ?? 0);
+
             document.getElementById('resPrincipalCorrigido').textContent = formatarMoeda(resumo.total_principal_corrigido);
-            document.getElementById('resJurosTotal').textContent = formatarMoeda(resumo.total_juros);
-            document.getElementById('resMultasTotal').textContent = formatarMoeda((resumo.total_multas || 0) + (resumo.total_honorarios || 0));
-            document.getElementById('resTotalGeral').textContent = formatarMoeda(resumo.total_geral);
+            document.getElementById('resJurosTotal').textContent = formatarMoeda(totalJuros);
+            document.getElementById('resMultasTotal').textContent = formatarMoeda(totalMultas + totalHon);
+            document.getElementById('resTotalGeral').textContent = formatarMoeda(totalGeral);
 
             // Popula tabela de itens
             const corpo = document.getElementById('corpoResultadoItens');
             corpo.innerHTML = '';
-            (res.itens || []).forEach(it => {
+            const listaItens = res.itens || res.itens_liquidados || [];
+            listaItens.forEach(it => {
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-50';
+                const valJuros = it.valor_juros ?? it.valor_juros_mora ?? 0;
+                const valSubtotal = it.subtotal ?? it.total_item ?? 0;
                 tr.innerHTML = `
                     <td class="p-2.5 text-center text-slate-400">${it.numero_item}</td>
                     <td class="p-2.5 font-sans font-medium text-slate-800">${it.descricao}</td>
@@ -626,9 +691,9 @@
                     <td class="p-2.5 text-right">${formatarMoeda(it.valor_original)}</td>
                     <td class="p-2.5 text-right text-slate-500">${Number(it.fator_correcao).toFixed(6)}</td>
                     <td class="p-2.5 text-right font-semibold text-slate-900">${formatarMoeda(it.valor_corrigido)}</td>
-                    <td class="p-2.5 text-right text-indigo-700 font-semibold">${formatarMoeda(it.valor_juros)}</td>
+                    <td class="p-2.5 text-right text-indigo-700 font-semibold">${formatarMoeda(valJuros)}</td>
                     <td class="p-2.5 text-right text-amber-700">${formatarMoeda(it.valor_multa_moratoria)}</td>
-                    <td class="p-2.5 text-right font-black text-slate-950 bg-slate-50">${formatarMoeda(it.subtotal)}</td>
+                    <td class="p-2.5 text-right font-black text-slate-950 bg-slate-50">${formatarMoeda(valSubtotal)}</td>
                 `;
                 corpo.appendChild(tr);
             });
@@ -636,7 +701,8 @@
             // Popula notas legais
             const listaNotas = document.getElementById('listaNotasLegais');
             listaNotas.innerHTML = '';
-            (res.notas_legais || []).forEach(nota => {
+            const notas = res.notas_legais || res.notas_metodologicas || [];
+            notas.forEach(nota => {
                 const li = document.createElement('li');
                 li.textContent = nota;
                 listaNotas.appendChild(li);
@@ -644,6 +710,34 @@
 
             // Rola suavemente até os resultados
             document.getElementById('secaoResultados').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function exportarPlanilhaResultado(formato = 'xlsx') {
+            if (!ultimoCalculoResultado) {
+                alert('Execute o cálculo primeiro.');
+                return;
+            }
+            try {
+                const res = await fetch(`{{ route('calculadora.exportar-planilha') }}?formato=${formato}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ resultado: ultimoCalculoResultado })
+                });
+                if (!res.ok) throw new Error('Falha ao gerar arquivo.');
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `memoria-calculo-judicial.${formato}`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } catch (e) {
+                alert('Erro ao exportar planilha: ' + e.message);
+            }
         }
 
         // Upload de Planilha (.xlsx, .csv)
@@ -717,9 +811,9 @@
             parcelas.forEach(p => {
                 adicionarLinha({
                     descricao: p.descricao,
-                    data: p.data,
+                    data: p.data_vencimento || p.data,
                     valor: p.valor_original,
-                    tipo: 'DEBITO'
+                    tipo: p.tipo || 'DEBITO'
                 });
             });
             atualizarContador();

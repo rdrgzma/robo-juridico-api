@@ -9,11 +9,14 @@ Route::get('/calculadora', [PublicCalculadoraController::class, 'index'])->name(
 
 // Endpoints AJAX para a Calculadora Pública
 Route::post('/calculadora/calcular', [PublicCalculadoraController::class, 'calcular'])->name('calculadora.calcular');
+Route::post('/calculadora/identificar-processo', [PublicCalculadoraController::class, 'identificarProcesso'])->name('calculadora.identificar-processo');
 Route::post('/calculadora/importar-planilha', [PublicCalculadoraController::class, 'importarPlanilha'])->name('calculadora.importar-planilha');
+Route::post('/calculadora/exportar-planilha', [PublicCalculadoraController::class, 'exportarPlanilha'])->name('calculadora.exportar-planilha');
 Route::post('/calculadora/emitir-laudo', [PublicCalculadoraController::class, 'emitirLaudo'])->name('calculadora.emitir-laudo');
 
-// Emissão e Impressão de Laudo Pericial Certificado (com QR Code)
+// Emissão, Impressão e Exportação de Laudo Pericial Certificado (com QR Code)
 Route::get('/laudo/{uuid}/imprimir', [PublicCalculadoraController::class, 'imprimirLaudo'])->name('laudo.imprimir');
+Route::get('/laudo/{uuid}/exportar', [PublicCalculadoraController::class, 'exportarLaudoSalvo'])->name('laudo.exportar');
 
 // Validação Pública de Autenticidade (Link do QR Code)
 Route::get('/validar/{uuid}', [PublicCalculadoraController::class, 'validar'])->name('validar.calculo');

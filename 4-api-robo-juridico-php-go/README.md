@@ -23,18 +23,21 @@ Solução corporativa completa para consulta automatizada de processos jurídico
 │ - Autenticação SHA-256 e cotas mensais       │     │    - Calculadora Judicial online gratuita         │
 │ - Motor de Cálculos Judiciais (Paridade      │     │    - Importador de planilhas (.xlsx, .csv, colar) │
 │   DrCalc, Lei 14.905/2024, juros e multas)   │     │    - Modal de captura de Lead (Nome, WhatsApp, OAB)│
-│ - Importador nativo .xlsx/.csv sem deps C    │     │    - Emissão de Laudo Certificado com QR Code     │
-│ - Worker coletor Bacen (SGS) e IBGE (SIDRA)  │     │    - Selo de Autenticidade Digital (/validar/{id})│
-│ - Sincronizador de 26+ tabelas de tribunais  │     ├───────────────────────────────────────────────────┤
-│ - Documentação Swagger interativa (/docs)    │     │ B) PAINEL ADMINISTRATIVO (/admin)                 │
-└──────────────────────┬───────────────────────┘     │    - Gestão de clientes, planos e MRR             │
-                       │                             │    - Calculadora Judicial completa                │
+│ - Importador e Exportador nativo .xlsx/.csv  │     │    - 1-Click Auto-Fill por número CNJ             │
+│ - Revisão de Contratos (Price, SAC e Gauss)  │     │    - Emissão de Laudo Certificado com QR Code SVG │
+│ - Calculadora de Prazos Fatais (CPC / CLT)   │     │    - Selo de Autenticidade Digital (/validar/{id})│
+│ - Monitoramento Push Webhooks (HMAC-SHA256)  │     ├───────────────────────────────────────────────────┤
+│ - Worker coletor Bacen (SGS) e IBGE (SIDRA)  │     │ B) PAINEL ADMINISTRATIVO (/admin)                 │
+│ - Sincronizador de 27 tabelas de tribunais   │     │    - Gestão de clientes, planos e MRR             │
+│ - Documentação Swagger interativa (/docs)    │     │    - CRM de Leads & Laudos (WhatsApp + 1-Click)   │
+└──────────────────────┬───────────────────────┘     │    - Calculadora Judicial completa                │
                        │                             │    - Auditoria global do sistema                  │
                        │                             ├───────────────────────────────────────────────────┤
                        │                             │ C) PORTAL DO CLIENTE (/portal)                    │
                        │                             │    - Autoatendimento do desenvolvedor             │
                        │                             │    - Emissão/revogação de chaves rj_live_...      │
-                       │                             │    - Calculadora Judicial para assinantes         │
+                       │                             │    - Calculadora Judicial + Histórico Salvo       │
+                       │                             │    - "Atualizar para Hoje (1-Click)"              │
                        │                             │    - Gráficos de cota e histórico de requisições  │
                        │                             └─────────────────┬─────────────────────────────────┘
                        │                                               │
@@ -42,46 +45,48 @@ Solução corporativa completa para consulta automatizada de processos jurídico
          ┌───────────────────────────────────────────────────────────────────────────┐
          │                    /app/dados/api.db (SQLite WAL Mode)                    │
          │ - Chaves criptografadas (SHA-256)        - Registro de Consumo e Cotas    │
-         │ - Clientes, Planos e Assinaturas         - Laudos Salvos e Leads Captados │
+         │ - Clientes, Planos e Assinaturas         - Laudos Salvos e Funil CRM      │
          └───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚡ Novas Funcionalidades: Módulo de Cálculos Judiciais & Lead Magnet
+## ⚡ Funcionalidades do Ecossistema: Motor de Cálculos, Prazos, Revisão Bancária, Webhooks & CRM
 
-O sistema agora conta com um motor completo de cálculos financeiros e judiciais com **100% de paridade com o DrCalc / EasyCalc**:
+O sistema conta com um motor completo de inteligência processual, cálculos financeiros e judiciais com **100% de paridade com o DrCalc / PJe-Calc**:
 
 1. **Motor de Cálculo Judicial de Alta Precisão (Go):**
    - Cálculos em precisão monetária arbitrária (`shopspring/decimal`), sem perdas por ponto flutuante.
    - Totalmente adaptado à **Lei Federal nº 14.905/2024** (nova Taxa Legal de Juros do Código Civil baseada em $\max(0, \text{Selic} - \text{IPCA})$ pós-agosto/2024).
-   - Juros moratórios convencionais com capitalização simples ou composta e cálculo diário *pro rata die*.
-   - Encargos da fase de cumprimento de sentença: **Art. 523, §1º do CPC** (+10% de multa e +10% de honorários advocatícios).
-   - Deflação negativa configurável (preservação do principal conforme jurisprudência pacificada).
-   - **Mais de 26 indexadores oficiais integrados:**
+   - **Juros Moratórios e Compensatórios/Remuneratórios** com capitalização simples ou composta e cálculo diário *pro rata die*.
+   - **Correção Monetária *Pro Rata Die* Linear** opcional (`aplicar_prorata_correcao`) e deflação negativa configurável.
+   - **Imputação de Pagamentos Parciais pelo Art. 354 do Código Civil** (`imputar_art_354_cc`), abatendo primeiro dos juros vencidos na data do pagamento e o excedente sobre o principal.
+   - Encargos da fase de cumprimento de sentença: **Art. 523, §1º do CPC** (+10% de multa e +10% de honorários advocatícios) e honorários sucumbenciais (Art. 85 CPC).
+   - **27 indexadores oficiais integrados com carga histórica offline (2023–2026) e coleta automática de 60 meses:**
      - **Estaduais:** TJSP, TJRJ, TJMG (Geral e Expurgada), TJRS, TJPR (Média IGP-DI/INPC e Precatórios IPCA-E), TJSC, TJES, TJCE, TJDF.
      - **Justiça Federal & Fazenda:** CJF Res. 267/2013 (Ações Condenatórias Gerais, Previdenciário INPC/IPCA-E, Fazenda Pública TR/Lei 11.960 e Desapropriação).
      - **Trabalhista:** TST Trabalhista (ADC 58 STF - IPCA-E / Selic).
-     - **Índices Econômicos:** IPCA (IBGE), INPC (IBGE), SELIC Acumulada, Taxa Legal Bacen, IGP-M (FGV), IGP-DI (FGV), INCC (FGV), TR e Poupança.
+     - **Índices Econômicos:** IPCA (IBGE), IPCA-15 (IBGE), INPC (IBGE), SELIC Acumulada, CDI, Taxa Legal Bacen, IGP-M (FGV), IGP-DI (FGV), INCC (FGV), TR e Poupança.
 
-2. **Robô Coletor Automático Diário e Mensal:**
-   - Worker em background em Go consultando a API do **Banco Central do Brasil (SGS)** e do **IBGE (SIDRA)**.
-   - Atualização automática dos índices com recálculo das tabelas práticas dos tribunais.
-   - Endpoints manuais de trigger (`POST /v1/calculos/coletar`) e status (`GET /v1/calculos/coletar/status`).
+2. **Autopreenchimento Judicial "1-Click Liquidation" (CNJ $\rightarrow$ Calculadora):**
+   - Ao informar o número do processo CNJ na Calculadora Pública ou nos Painéis (`/admin` e `/portal`), o sistema decodifica o tribunal, seleciona automaticamente o indexador correspondente (ex.: `TJMG`, `TJSP`, `TRF_GERAL`, `TST_IPCAE`) e consulta o DataJud/DJEN para preencher automaticamente o **Valor da Causa**, **Data de Ajuizamento** e **Partes (Autor × Réu)**.
 
-3. **Importador Universal de Planilhas (Excel `.xlsx` / CSV / Colar):**
-   - Decodificador nativo em Go (`/v1/calculos/importar-planilha`) sem dependências pesadas de bibliotecas C ou extensões PHP.
-   - Suporte para upload de arquivos `.xlsx`, `.csv`, `.tsv` ou colagem direta (`Ctrl+C / Ctrl+V`) de linhas de planilha com dezenas de parcelas.
+3. **Módulo de Revisão de Contratos Bancários (`PRICE`, `SAC` e `GAUSS`):**
+   - Endpoint `POST /v1/calculos/financiamento` que compara o sistema contratado (Tabela Price, SAC ou Gauss) com a taxa média de mercado ou método linear de Gauss (juros simples sem anatocismo), apurando diferença mensal, saldo devedor recalculado e **repetição do indébito simples e em dobro (Art. 42, parágrafo único do CDC)**.
 
-4. **Laudo Pericial Certificado com QR Code de Autenticidade (PDF Nativo):**
-   - Emissão de documento formal em formato A4 (`/laudo/{uuid}/imprimir`) pronto para juntada em petições.
-   - Hash criptográfico **SHA-256** gravado no banco que garante que o laudo não foi adulterado.
-   - **QR Code dinâmico** em SVG apontando para a página pública de verificação (`/validar/{uuid}`), com selo digital verde atestando a autenticidade perante magistrados, advogados e peritos.
+4. **Calculadora de Prazos Processuais Fatais (CPC/2015 & CLT):**
+   - Endpoints `POST /v1/prazos/calcular` e `GET /v1/prazos/feriados` que calculam **Data de Disponibilização no DJe**, **Data de Publicação** (Art. 224, §2º CPC), **Início da Contagem** (Art. 224, §3º CPC) e **Vencimento Fatal** em dias úteis ou corridos, considerando feriados nacionais, móveis (Páscoa, Carnaval, Corpus Christi), **recesso forense de 20/dez a 20/jan (Art. 220 CPC)** e **prazo em dobro** (Art. 180/183/186 CPC).
 
-5. **Página Pública & Captação de Leads (Lead Magnet):**
-   - Interface pública responsiva em `GET /` e `GET /calculadora` construída com Tailwind CSS.
-   - Cálculos em tempo real via AJAX com exibição de KPIs e tabela discriminada de parcelas.
-   - Modal de conversão de Leads que solicita Nome, E-mail, WhatsApp e OAB/Empresa antes da emissão do Laudo com QR Code.
+5. **Monitoramento Push via Webhooks Assinados (`HMAC-SHA256`):**
+   - Endpoints `GET/POST/DELETE /v1/webhooks` e `POST /v1/webhooks/testar` para cadastrar assinaturas de monitoramento contínuo de processos CNJ ou inscrições OAB, entregando notificações HTTP assinadas com `X-Webhook-Signature: sha256=<hex>`.
+
+6. **Importador e Exportador Universal de Planilhas (Excel `.xlsx` e `.csv`):**
+   - Importação nativa (`/v1/calculos/importar-planilha`) e exportação nativa (`/v1/calculos/exportar-planilha`) de memórias de cálculo em `.xlsx` (OpenXML) e `.csv` (UTF-8 com BOM) sem dependências C.
+
+7. **Laudo Pericial Certificado com QR Code SVG Nativo & CRM de Leads:**
+   - Emissão de Laudo A4 (`/laudo/{uuid}/imprimir`) com Hash **SHA-256** e **QR Code SVG matricial nativo** (`App\Services\QrCodeGenerator`) apontando para `/validar/{uuid}`.
+   - **Funil CRM no Painel Admin (`/admin/calculos-salvos`):** Gestão de leads captados com status (*Novo*, *Contatado*, *Qualificado*, *Convertido*, *Perdido*), link direto para WhatsApp e botão **"Converter em Cliente (1-Click)"**.
+   - **Histórico de Cálculos no Portal do Assinante (`/portal/meus-calculos`):** Armazenamento dos cálculos do escritório com botão **"Atualizar para Hoje (1-Click)"**.
 
 ---
 
@@ -101,22 +106,40 @@ docker compose up -d --build
 - **Painel do Administrador:** [http://localhost:8080/admin](http://localhost:8080/admin)
   - **Login:** `admin@empresa.com.br` | **Senha:** `admin123`
   - **Calculadora Judicial Interna:** [http://localhost:8080/admin/calculadora-judicial](http://localhost:8080/admin/calculadora-judicial)
+  - **CRM de Laudos & Leads Captados:** [http://localhost:8080/admin/calculos-salvos](http://localhost:8080/admin/calculos-salvos)
 - **Portal do Desenvolvedor / Cliente:** [http://localhost:8080/portal](http://localhost:8080/portal)
   - **Login:** `cliente@empresa.com.br` | **Senha:** `cliente123`
   - **Calculadora Judicial para Clientes:** [http://localhost:8080/portal/calculadora-judicial](http://localhost:8080/portal/calculadora-judicial)
+  - **Meus Cálculos Salvos:** [http://localhost:8080/portal/meus-calculos](http://localhost:8080/portal/meus-calculos)
 
 ---
 
-## 📡 Novos Endpoints da API Go
+## 📡 Catálogo de Endpoints da API Go
 
-| Método | Rota | Autenticação | Descrição |
-|---|---|---|---|
-| `GET` | `/v1/calculos/indices` | Sim (`X-API-Key`) | Lista todos os indexadores econômicos e tabelas dos tribunais disponíveis |
-| `GET` | `/v1/calculos/indices/{codigo}/serie` | Sim (`X-API-Key`) | Retorna a série histórica completa mensal do índice |
-| `POST` | `/v1/calculos/judicial` | Sim (`X-API-Key`) | Executa a liquidação judicial completa de débitos e parcelas |
-| `POST` | `/v1/calculos/importar-planilha` | Sim (`X-API-Key`) | Importa arquivo Excel (.xlsx), CSV ou texto colado e devolve as parcelas estruturadas |
-| `POST` | `/v1/calculos/coletar` | Sim (`X-API-Key`) | Dispara imediatamente a rotina de coleta no Bacen (SGS) e IBGE (SIDRA) |
-| `GET` | `/v1/calculos/coletar/status` | Sim (`X-API-Key`) | Consulta o status e relatório da última coleta automática de índices |
+| Método | Rota | Autenticação | Custo de Cota | Descrição |
+|---|---|---|---|---|
+| `GET` | `/saude` | Não | Não | Healthcheck e versão da API |
+| `GET` | `/v1/cnj/{numero}` | Sim (`X-API-Key`) | Não | Valida e decodifica o número CNJ (Módulo 97 + Tribunal) |
+| `GET` | `/v1/processos/{numero}/existe` | Sim (`X-API-Key`) | Não | Checagem rápida de existência no DataJud ou DJEN |
+| `GET` | `/v1/processos/{numero}` | Sim (`X-API-Key`) | **Sim (1)** | Consulta completa consolidada (DataJud + DJEN) |
+| `POST` | `/v1/processos/consultar` | Sim (`X-API-Key`) | **Sim (1)** | Consulta de processo via payload JSON |
+| `GET` | `/v1/oab/{uf}/{numero}/processos` | Sim (`X-API-Key`) | **Sim (1)** | Processos com publicações da OAB no período |
+| `GET` | `/v1/oab/{uf}/{numero}/publicacoes` | Sim (`X-API-Key`) | **Sim (1)** | Publicações do DJEN na íntegra por OAB |
+| `GET` | `/v1/conta` | Sim (`X-API-Key`) | Não | Extrato de cota mensal usada, restante e renovação |
+| `GET` | `/v1/calculos/indices` | Sim (`X-API-Key`) | Não | Lista todos os 27 indexadores econômicos e tabelas de tribunais |
+| `GET` | `/v1/calculos/indices/{codigo}/serie` | Sim (`X-API-Key`) | Não | Retorna a série histórica mensal completa do índice |
+| `POST` | `/v1/calculos/judicial` | Sim (`X-API-Key`) | Não | Executa liquidação judicial completa (Lei 14.905, Art. 354 CC, Art. 523 CPC) |
+| `POST` | `/v1/calculos/financiamento` | Sim (`X-API-Key`) | Não | Revisão de contratos bancários (`PRICE`, `SAC`, `GAUSS` e Art. 42 CDC) |
+| `POST` | `/v1/calculos/importar-planilha` | Sim (`X-API-Key`) | Não | Importa arquivo Excel (`.xlsx`), CSV ou texto colado |
+| `POST` | `/v1/calculos/exportar-planilha` | Sim (`X-API-Key`) | Não | Exporta memória de cálculo liquidada em `.xlsx` ou `.csv` |
+| `POST` | `/v1/calculos/coletar` | Sim (`X-API-Key`) | Não | Dispara imediatamente a coleta no Bacen (SGS) e IBGE (SIDRA) |
+| `GET` | `/v1/calculos/coletar/status` | Sim (`X-API-Key`) | Não | Consulta o status e relatório da última coleta automática |
+| `POST` | `/v1/prazos/calcular` | Sim (`X-API-Key`) | Não | Calcula prazos processuais fatais (CPC/2015 Art. 224 e CLT Art. 775) |
+| `GET` | `/v1/prazos/feriados` | Sim (`X-API-Key`) | Não | Lista feriados nacionais, móveis e forenses do ano |
+| `GET` | `/v1/webhooks` | Sim (`X-API-Key`) | Não | Lista webhooks de monitoramento push cadastrados |
+| `POST` | `/v1/webhooks` | Sim (`X-API-Key`) | Não | Registra novo webhook de monitoramento de processo ou OAB |
+| `DELETE` | `/v1/webhooks/{id}` | Sim (`X-API-Key`) | Não | Remove um webhook cadastrado |
+| `POST` | `/v1/webhooks/testar` | Sim (`X-API-Key`) | Não | Simula disparo de evento push com assinatura `HMAC-SHA256` |
 
 ---
 
@@ -125,11 +148,12 @@ docker compose up -d --build
 O ecossistema conta com baterias completas de testes unitários e de integração:
 
 ```bash
-# 1. Testes do Motor em Go (incluindo engine de cálculo, importador e coletores)
+# 1. Testes do Motor em Go (incluindo engine de cálculo, financiamento, prazos, webhooks, importador, exportador e coletores)
 cd api-juridica-go
-go test ./...
+go test -v ./...
 
-# 2. Testes da Aplicação Web e Painel PHP (incluindo geração de laudos e validação de hash)
+# 2. Testes da Aplicação Web e Painel PHP (incluindo geração de laudos, QR Code SVG nativo, auto-fill CNJ e validação de hash)
 cd ../painel
-vendor/bin/phpunit
+php vendor/bin/phpunit
 ```
+

@@ -195,6 +195,7 @@ func processarLinhasTabela(linhas [][]string) ([]ParcelaItem, error) {
 			Descricao:      strDesc,
 			Tipo:           TipoParcela(strTipo),
 			DataVencimento: dtFormatada,
+			Data:           dtFormatada,
 			ValorOriginal:  valDecimal,
 		})
 		numItem++

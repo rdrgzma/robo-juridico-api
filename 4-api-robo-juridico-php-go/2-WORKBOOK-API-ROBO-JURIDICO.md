@@ -674,7 +674,7 @@ Extrai parcelas em lote a partir de upload de arquivo Excel (`.xlsx`), CSV (`.cs
 ---
 
 ### 11. `POST /v1/calculos/coletar` e `GET /v1/calculos/coletar/status`
-Dispara e monitora o worker em background que sincroniza os índices econômicos diários e mensais no Bacen (SGS) e IBGE (SIDRA). Não consome cota.
+Dispara e monitora o worker em background que sincroniza os índices econômicos diários e mensais no Bacen (SGS) e IBGE (SIDRA) para uma janela histórica de 60 meses. Não consome cota.
 ```bash
 # Disparar coleta manual imediata
 curl -X POST -H "X-API-Key: <sua-chave>" http://localhost:8000/v1/calculos/coletar
@@ -685,12 +685,72 @@ curl -H "X-API-Key: <sua-chave>" http://localhost:8000/v1/calculos/coletar/statu
 
 ---
 
-### 12. Módulo Web de Laudos e Lead Magnet (Painel PHP na Porta 8080)
+### 12. `POST /v1/calculos/exportar-planilha`
+Liquida o cálculo judicial e exporta a memória analítica diretamente em formato Excel (`.xlsx` OpenXML) ou CSV (`.csv` UTF-8 com BOM). Não consome cota.
+```bash
+curl -X POST "http://localhost:8000/v1/calculos/exportar-planilha?formato=xlsx" \
+  -H "X-API-Key: <sua-chave>" \
+  -H "Content-Type: application/json" \
+  -d @payload_calculo.json -o memoria_calculo.xlsx
+```
+
+---
+
+### 13. `POST /v1/calculos/financiamento`
+Executa a revisão contábil de contratos bancários comparando os sistemas de amortização **Tabela Price (`PRICE`)**, **SAC (`SAC`)** e **Método Linear de Gauss (`GAUSS`)**, apurando a diferença mensal cobrada a maior, o saldo devedor recalculado e a **repetição do indébito simples e em dobro (Art. 42, parágrafo único do CDC)**. Não consome cota.
+```bash
+curl -X POST http://localhost:8000/v1/calculos/financiamento \
+  -H "X-API-Key: <sua-chave>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "valor_financiado": 50000.00,
+    "quantidade_parcelas": 36,
+    "taxa_mensal_contrato": 2.49,
+    "taxa_mensal_mercado": 1.45,
+    "sistema_contratado": "PRICE",
+    "sistema_revisado": "GAUSS",
+    "parcelas_pagas": 18,
+    "data_primeira_parcela": "2024-01-15"
+  }'
+```
+
+---
+
+### 14. `POST /v1/prazos/calcular` e `GET /v1/prazos/feriados`
+Calcula prazos processuais fatais conforme o **CPC/2015 (Art. 219 e Art. 224)** e a **CLT (Art. 775)**, computando a data de publicação a partir da disponibilização no DJe, o 1º dia útil do início da contagem e o vencimento fatal com linha do tempo auditável dia a dia (incluindo feriados nacionais, Páscoa, Carnaval, Corpus Christi, **recesso forense de 20/dez a 20/jan - Art. 220 CPC** e **prazo em dobro**). Não consome cota.
+```bash
+curl -X POST http://localhost:8000/v1/prazos/calcular \
+  -H "X-API-Key: <sua-chave>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data_referencia": "2026-05-04",
+    "tipo_evento": "DISPONIBILIZACAO_DJE",
+    "quantidade_dias": 15,
+    "contagem": "DIAS_UTEIS",
+    "rito": "CPC",
+    "prazo_em_dobro": false,
+    "suspender_recesso": true,
+    "uf": "SP"
+  }'
+```
+
+---
+
+### 15. `GET/POST/DELETE /v1/webhooks` e `POST /v1/webhooks/testar`
+Gerencia assinaturas de **Webhooks Push** para monitoramento contínuo de processos CNJ ou inscrições OAB, entregando notificações HTTP assinadas com `X-Webhook-Signature: sha256=<hex>` (`HMAC-SHA256`). Não consome cota.
+
+---
+
+### 16. Módulo Web de Laudos, CRM e Lead Magnet (Painel PHP na Porta 8080)
 Além dos endpoints REST em Go, a plataforma web fornece interfaces integradas:
-* **`GET /` ou `GET /calculadora`:** Calculadora judicial pública com captação de leads.
+* **`GET /` ou `GET /calculadora`:** Calculadora judicial pública com captação de leads e autopreenchimento CNJ.
+* **`POST /calculadora/identificar-processo`:** Autopreenchimento 1-Click via número CNJ (identifica Tribunal, tabela prática de correção, Valor da Causa, Data de Ajuizamento e Partes).
+* **`POST /calculadora/exportar-planilha` e `GET /laudo/{uuid}/exportar`:** Download da memória de cálculo em Excel (`.xlsx`) ou CSV (`.csv`).
 * **`POST /calculadora/emitir-laudo`:** Salva o cálculo, dados do lead e gera o Hash SHA-256 e UUID.
-* **`GET /laudo/{uuid}/imprimir`:** Visualização formatada em folha A4 com QR Code de autenticidade para petição ou impressão em PDF.
+* **`GET /laudo/{uuid}/imprimir`:** Visualização formatada em folha A4 com **QR Code SVG matricial nativo** para petição ou impressão em PDF.
 * **`GET /validar/{uuid}`:** Selo público de autenticidade digital (acessível via câmera do celular apontada para o QR Code do laudo).
+* **`GET /admin/calculos-salvos`:** Funil CRM de Leads no Painel Admin com botão de WhatsApp e conversão 1-Click em Cliente.
+* **`GET /portal/meus-calculos`:** Histórico de Cálculos Salvos do Assinante com botão **"Atualizar para Hoje (1-Click)"**.
 
 ---
 

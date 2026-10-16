@@ -41,7 +41,6 @@ func CalcularJurosMoratorios(
 		if cfg.Modo == CapitalizacaoComposta {
 			// (1 + i)^n - 1
 			fatorTaxa := um.Add(taxaMensal.Div(cento))
-			// Aproximação para períodos fracionados / inteiros
 			fatorAcumulado := decimalPow(fatorTaxa, fatorMeses)
 			taxaAcumuladaPct = fatorAcumulado.Sub(um).Mul(cento).Round(4)
 		} else {
@@ -52,7 +51,7 @@ func CalcularJurosMoratorios(
 		valorJuros = valorBase.Mul(taxaAcumuladaPct.Div(cento)).Round(2)
 		return taxaAcumuladaPct, valorJuros, "Juros moratórios convencionais", nil
 
-	case JurosTaxaLegal:
+	case JurosTaxaLegal, JurosLei14905:
 		// Aplicação híbrida da Lei 14.905/2024:
 		// Se dataInicio < 28/08/2024: período 1 com 1% a.m. simples até 28/08/2024
 		// A partir de 28/08/2024: soma da Taxa Legal mensal divulgada pelo Bacen
@@ -118,6 +117,58 @@ func CalcularJurosMoratorios(
 	return decimal.Zero, decimal.Zero, "", nil
 }
 
+// CalcularJurosCompensatorios apura os juros compensatórios/remuneratórios sobre o valor corrigido da parcela
+func CalcularJurosCompensatorios(
+	cfg JurosCompensatoriosConfig,
+	dataVencimento, dataAtualizacao time.Time,
+	valorBase decimal.Decimal,
+) (taxaAcumuladaPct, valorJuros decimal.Decimal, obs string) {
+	taxaMensal := cfg.PercentualMensal
+	if taxaMensal.LessThanOrEqual(decimal.Zero) {
+		taxaMensal = cfg.TaxaMensal
+	}
+	if !cfg.Ativo || taxaMensal.LessThanOrEqual(decimal.Zero) {
+		return decimal.Zero, decimal.Zero, ""
+	}
+
+	inicio := dataVencimento
+	if cfg.DataInicio != "" {
+		if dt, errParse := ParseDataFlexivel(cfg.DataInicio); errParse == nil && !dt.IsZero() {
+			inicio = dt
+		}
+	}
+
+	fim := dataAtualizacao
+	if cfg.DataFim != "" {
+		if dt, errParse := ParseDataFlexivel(cfg.DataFim); errParse == nil && !dt.IsZero() {
+			fim = dt
+		}
+	}
+
+	if !inicio.Before(fim) {
+		return decimal.Zero, decimal.Zero, ""
+	}
+
+	cento := decimal.NewFromInt(100)
+	um := decimal.NewFromInt(1)
+
+	mesesCheios, diasRestantes := calcularMesesEDias(inicio, fim)
+	fatorMeses := decimal.NewFromInt(int64(mesesCheios)).Add(
+		decimal.NewFromInt(int64(diasRestantes)).Div(decimal.NewFromInt(30)),
+	)
+
+	if cfg.Modo == CapitalizacaoComposta {
+		fatorTaxa := um.Add(taxaMensal.Div(cento))
+		fatorAcumulado := decimalPow(fatorTaxa, fatorMeses)
+		taxaAcumuladaPct = fatorAcumulado.Sub(um).Mul(cento).Round(4)
+	} else {
+		taxaAcumuladaPct = taxaMensal.Mul(fatorMeses).Round(4)
+	}
+
+	valorJuros = valorBase.Mul(taxaAcumuladaPct.Div(cento)).Round(2)
+	return taxaAcumuladaPct, valorJuros, "Juros compensatórios"
+}
+
 // calcularMesesEDias calcula a distância em meses comerciais e dias entre duas datas
 func calcularMesesEDias(inicio, fim time.Time) (meses int, dias int) {
 	if inicio.After(fim) {
@@ -145,18 +196,13 @@ func decimalPow(base, exp decimal.Decimal) decimal.Decimal {
 	if fBase <= 0 {
 		return decimal.Zero
 	}
-	// Exp em float com conversão segura de volta para decimal
-	res := decimal.NewFromFloat(1.0)
-	// Para aproximação de juros compostos:
 	intExp := exp.IntPart()
 	fracExp := exp.Sub(decimal.NewFromInt(intExp))
 
 	pot := base.Pow(decimal.NewFromInt(intExp))
 	if !fracExp.IsZero() {
-		// (1 + i * frac) para o pedaço pro rata
 		fFrac, _ := fracExp.Float64()
 		pot = pot.Mul(decimal.NewFromFloat(1.0 + (fBase-1.0)*fFrac))
 	}
-	res = pot
-	return res
+	return pot
 }

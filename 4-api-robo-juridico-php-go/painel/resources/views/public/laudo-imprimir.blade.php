@@ -39,6 +39,12 @@
             </div>
         </div>
         <div class="flex items-center gap-3">
+            <a href="{{ route('laudo.exportar', ['uuid' => $calculo->uuid, 'formato' => 'xlsx']) }}" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-xs font-semibold rounded-xl text-white transition-all flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Baixar Excel (.xlsx)
+            </a>
             <a href="{{ route('validar.calculo', $calculo->uuid) }}" target="_blank" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-xl text-slate-200 transition-all border border-slate-700 flex items-center gap-1.5">
                 <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
@@ -137,7 +143,7 @@
                 <div class="space-y-0.5">
                     <span class="text-slate-500 font-medium block">Correção Monetária:</span>
                     <p class="font-semibold text-slate-800">
-                        {{ $calculo->indexador_codigo }} (com aplicação de pro rata die)
+                        {{ $calculo->indexador_codigo }}
                     </p>
                     <span class="text-[10px] text-slate-400">
                         Deflação negativa: {{ !empty($requisicao['aplicar_deflacao']) ? 'Aplicada' : 'Não aplicada (preserva principal)' }}
@@ -148,14 +154,14 @@
                     <span class="text-slate-500 font-medium block">Juros Moratórios:</span>
                     <p class="font-semibold text-slate-800">
                         @php
-                            $jt = $requisicao['juros_mora']['tipo'] ?? 'CONVENCIONAL_MENSAL';
-                            $jm = $requisicao['juros_mora']['modo'] ?? 'SIMPLES';
-                            $jp = $requisicao['juros_mora']['percentual_mensal'] ?? 1.0;
+                            $jt = $requisicao['juros_mora']['tipo'] ?? ($requisicao['juros_tipo'] ?? 'CONVENCIONAL_MENSAL');
+                            $jm = $requisicao['juros_mora']['modo'] ?? ($requisicao['juros_modo'] ?? 'SIMPLES');
+                            $jp = $requisicao['juros_mora']['percentual_mensal'] ?? ($requisicao['juros_percentual'] ?? 1.0);
                         @endphp
-                        @if($jt === 'LEI_14905')
+                        @if($jt === 'LEI_14905' || $jt === 'TAXA_LEGAL')
                             Taxa Legal (Lei 14.905/2024 - SELIC menos IPCA)
                         @else
-                            {{ number_format($jp, 2, ',', '.') }}% a.m. (Juros {{ ucfirst(strtolower($jm)) }})
+                            {{ number_format((float)$jp, 2, ',', '.') }}% a.m. (Juros {{ ucfirst(strtolower($jm)) }})
                         @endif
                     </p>
                     <span class="text-[10px] text-slate-400">Pro rata die diário ativo</span>
@@ -165,7 +171,7 @@
                     <span class="text-slate-500 font-medium block">Penalidades Processuais:</span>
                     <p class="font-semibold text-slate-800">
                         @php
-                            $fase = $requisicao['fase_execucao'] ?? [];
+                            $fase = $requisicao['fase_execucao'] ?? $requisicao;
                             $penalidades = [];
                             if (!empty($fase['aplicar_art_523_multa'])) $penalidades[] = 'Multa 523 (10%)';
                             if (!empty($fase['aplicar_art_523_honorarios'])) $penalidades[] = 'Hon. 523 (10%)';
@@ -202,18 +208,29 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100 font-mono-code text-[11px]">
-                        @foreach($resultado['itens'] ?? [] as $it)
+                        @php
+                            $itensLaudo = $resultado['itens'] ?? $resultado['itens_liquidados'] ?? [];
+                        @endphp
+                        @foreach($itensLaudo as $it)
+                            @php
+                                $dtVencStr = $it['data_vencimento'] ?? '';
+                                if (preg_match('/^\d{4}-\d{2}-\d{2}/', $dtVencStr)) {
+                                    $dtVencStr = \Carbon\Carbon::parse($dtVencStr)->format('d/m/Y');
+                                }
+                                $valJurosItem = (float)($it['valor_juros'] ?? $it['valor_juros_mora'] ?? 0);
+                                $valSubtotalItem = (float)($it['subtotal'] ?? $it['total_item'] ?? 0);
+                            @endphp
                             <tr class="hover:bg-slate-50">
                                 <td class="py-2 px-3 text-center text-slate-400 font-normal">{{ $it['numero_item'] }}</td>
                                 <td class="py-2 px-3 font-medium font-sans text-slate-800">{{ $it['descricao'] }}</td>
-                                <td class="py-2 px-3 text-slate-600">{{ \Carbon\Carbon::parse($it['data_vencimento'])->format('d/m/Y') }}</td>
-                                <td class="py-2 px-3 text-right text-slate-700">{{ number_format($it['valor_original'], 2, ',', '.') }}</td>
-                                <td class="py-2 px-3 text-right text-slate-500">{{ number_format($it['fator_correcao'], 6, ',', '.') }}</td>
-                                <td class="py-2 px-3 text-right font-semibold text-slate-900">{{ number_format($it['valor_corrigido'], 2, ',', '.') }}</td>
-                                <td class="py-2 px-3 text-right text-indigo-700 font-semibold">{{ number_format($it['valor_juros'], 2, ',', '.') }}</td>
-                                <td class="py-2 px-3 text-right text-amber-700">{{ number_format($it['valor_multa_moratoria'], 2, ',', '.') }}</td>
+                                <td class="py-2 px-3 text-slate-600">{{ $dtVencStr }}</td>
+                                <td class="py-2 px-3 text-right text-slate-700">{{ number_format((float)$it['valor_original'], 2, ',', '.') }}</td>
+                                <td class="py-2 px-3 text-right text-slate-500">{{ number_format((float)$it['fator_correcao'], 6, ',', '.') }}</td>
+                                <td class="py-2 px-3 text-right font-semibold text-slate-900">{{ number_format((float)$it['valor_corrigido'], 2, ',', '.') }}</td>
+                                <td class="py-2 px-3 text-right text-indigo-700 font-semibold">{{ number_format($valJurosItem, 2, ',', '.') }}</td>
+                                <td class="py-2 px-3 text-right text-amber-700">{{ number_format((float)($it['valor_multa_moratoria'] ?? 0), 2, ',', '.') }}</td>
                                 <td class="py-2 px-3 text-right font-black text-slate-950 bg-slate-50">
-                                    {{ number_format($it['subtotal'], 2, ',', '.') }}
+                                    {{ number_format($valSubtotalItem, 2, ',', '.') }}
                                 </td>
                             </tr>
                         @endforeach
@@ -223,12 +240,20 @@
         </div>
 
         <!-- Quadro Resumo de Fechamento -->
+        @php
+            $resumoLaudo = $resultado['resumo'] ?? [];
+            $notasLaudo = $resultado['notas_legais'] ?? $resultado['notas_metodologicas'] ?? [];
+            $totalJurosLaudo = (float)($resumoLaudo['total_juros'] ?? $resumoLaudo['total_juros_mora'] ?? 0);
+            $totalMultasLaudo = (float)($resumoLaudo['total_multas'] ?? (($resumoLaudo['total_multa_moratoria'] ?? 0) + ($resumoLaudo['multa_art_523_cpc'] ?? 0)));
+            $totalHonLaudo = (float)($resumoLaudo['total_honorarios'] ?? (($resumoLaudo['honorarios_art_523_cpc'] ?? 0) + ($resumoLaudo['honorarios_sucumbenciais'] ?? 0)));
+            $totalGeralLaudo = (float)($resumoLaudo['total_geral'] ?? $resumoLaudo['total_geral_devido'] ?? 0);
+        @endphp
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
             <!-- Notas Técnicas / Legais -->
             <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-2">
                 <span class="font-bold text-slate-900 uppercase tracking-wider text-[10px] block">Fundamentação e Notas Técnicas</span>
                 <ul class="list-disc list-inside text-slate-600 space-y-1 text-[11px] leading-relaxed">
-                    @forelse($resultado['notas_legais'] ?? [] as $nota)
+                    @forelse($notasLaudo as $nota)
                         <li>{{ $nota }}</li>
                     @empty
                         <li>Liquidação executada de acordo com as normas consolidadas da Corregedoria Geral da Justiça e Código de Processo Civil.</li>
@@ -243,22 +268,22 @@
                 <div class="space-y-2 text-xs border-b border-slate-800 pb-3 font-mono-code">
                     <div class="flex justify-between">
                         <span class="text-slate-400 font-sans">Principal Corrigido:</span>
-                        <span class="font-semibold">R$ {{ number_format($resultado['resumo']['total_principal_corrigido'] ?? 0, 2, ',', '.') }}</span>
+                        <span class="font-semibold">R$ {{ number_format((float)($resumoLaudo['total_principal_corrigido'] ?? 0), 2, ',', '.') }}</span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-slate-400 font-sans">Juros Moratórios Acumulados:</span>
-                        <span class="font-semibold text-indigo-300">R$ {{ number_format($resultado['resumo']['total_juros'] ?? 0, 2, ',', '.') }}</span>
+                        <span class="font-semibold text-indigo-300">R$ {{ number_format($totalJurosLaudo, 2, ',', '.') }}</span>
                     </div>
-                    @if(!empty($resultado['resumo']['total_multas']))
+                    @if($totalMultasLaudo > 0)
                         <div class="flex justify-between">
                             <span class="text-slate-400 font-sans">Multas Processuais (Mora / Art. 523):</span>
-                            <span class="font-semibold text-amber-300">R$ {{ number_format($resultado['resumo']['total_multas'], 2, ',', '.') }}</span>
+                            <span class="font-semibold text-amber-300">R$ {{ number_format($totalMultasLaudo, 2, ',', '.') }}</span>
                         </div>
                     @endif
-                    @if(!empty($resultado['resumo']['total_honorarios']))
+                    @if($totalHonLaudo > 0)
                         <div class="flex justify-between">
                             <span class="text-slate-400 font-sans">Honorários Advocatícios:</span>
-                            <span class="font-semibold text-emerald-300">R$ {{ number_format($resultado['resumo']['total_honorarios'], 2, ',', '.') }}</span>
+                            <span class="font-semibold text-emerald-300">R$ {{ number_format($totalHonLaudo, 2, ',', '.') }}</span>
                         </div>
                     @endif
                 </div>
@@ -266,7 +291,7 @@
                 <div class="pt-3 flex justify-between items-baseline">
                     <span class="font-bold text-sm tracking-tight font-sans">VALOR TOTAL DA EXECUÇÃO:</span>
                     <span class="text-2xl font-black text-emerald-400 font-mono-code">
-                        R$ {{ number_format($resultado['resumo']['total_geral'] ?? 0, 2, ',', '.') }}
+                        R$ {{ number_format($totalGeralLaudo, 2, ',', '.') }}
                     </span>
                 </div>
             </div>

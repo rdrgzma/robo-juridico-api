@@ -380,5 +380,92 @@ func TestRotasCalculoJudicial(t *testing.T) {
 	if resCalc["sucesso"] != true {
 		t.Errorf("Esperado sucesso=true no calculo: %v", resCalc)
 	}
-}
 
+	// Verifica presença dos campos unificados para o painel PHP e API Go
+	if resCalc["itens"] == nil || resCalc["itens_liquidados"] == nil {
+		t.Errorf("Esperava ambos 'itens' e 'itens_liquidados' no JSON de resposta")
+	}
+
+	// 4. POST /v1/calculos/exportar-planilha?formato=xlsx
+	reqExport := httptest.NewRequest("POST", "/v1/calculos/exportar-planilha?formato=xlsx", strings.NewReader(payload))
+	reqExport.Header.Set("Content-Type", "application/json")
+	reqExport.Header.Set("X-API-Key", chaveTesteValida)
+	wExport := httptest.NewRecorder()
+	roteador.ServeHTTP(wExport, reqExport)
+
+	if wExport.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em /v1/calculos/exportar-planilha, obtido %d", wExport.Code)
+	}
+	if !strings.Contains(wExport.Header().Get("Content-Type"), "spreadsheetml.sheet") {
+		t.Errorf("Content-Type inesperado na exportacao XLSX: %s", wExport.Header().Get("Content-Type"))
+	}
+
+	// 5. POST /v1/calculos/financiamento (Método de Gauss)
+	payloadFin := `{
+		"valor_financiado": 40000,
+		"numero_parcelas": 24,
+		"taxa_contratada_mensal": 2.5,
+		"taxa_mercado_mensal": 1.5,
+		"sistema_amortizacao": "GAUSS",
+		"restituicao_em_dobro": true
+	}`
+	reqFin := httptest.NewRequest("POST", "/v1/calculos/financiamento", strings.NewReader(payloadFin))
+	reqFin.Header.Set("Content-Type", "application/json")
+	reqFin.Header.Set("X-API-Key", chaveTesteValida)
+	wFin := httptest.NewRecorder()
+	roteador.ServeHTTP(wFin, reqFin)
+
+	if wFin.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em /v1/calculos/financiamento, obtido %d: %s", wFin.Code, wFin.Body.String())
+	}
+
+	// 6. POST /v1/prazos/calcular e GET /v1/prazos/feriados
+	payloadPrazo := `{
+		"data_disponibilizacao": "2026-10-08",
+		"dias_prazo": 15,
+		"rito": "CPC_UTEIS",
+		"tipo_intimacao": "DIARIO_ELETRONICO"
+	}`
+	reqPrazo := httptest.NewRequest("POST", "/v1/prazos/calcular", strings.NewReader(payloadPrazo))
+	reqPrazo.Header.Set("Content-Type", "application/json")
+	reqPrazo.Header.Set("X-API-Key", chaveTesteValida)
+	wPrazo := httptest.NewRecorder()
+	roteador.ServeHTTP(wPrazo, reqPrazo)
+
+	if wPrazo.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em /v1/prazos/calcular, obtido %d: %s", wPrazo.Code, wPrazo.Body.String())
+	}
+
+	reqFeriados := httptest.NewRequest("GET", "/v1/prazos/feriados?ano=2026", nil)
+	reqFeriados.Header.Set("X-API-Key", chaveTesteValida)
+	wFeriados := httptest.NewRecorder()
+	roteador.ServeHTTP(wFeriados, reqFeriados)
+	if wFeriados.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em /v1/prazos/feriados, obtido %d", wFeriados.Code)
+	}
+
+	// 7. POST /v1/webhooks, GET /v1/webhooks e POST /v1/webhooks/testar
+	payloadWh := `{
+		"tipo_alvo": "OAB",
+		"alvo": "SP/123456",
+		"url_destino": "https://exemplo.adv.br/webhook",
+		"segredo": "meu-segredo-hmac"
+	}`
+	reqWh := httptest.NewRequest("POST", "/v1/webhooks", strings.NewReader(payloadWh))
+	reqWh.Header.Set("Content-Type", "application/json")
+	reqWh.Header.Set("X-API-Key", chaveTesteValida)
+	wWh := httptest.NewRecorder()
+	roteador.ServeHTTP(wWh, reqWh)
+	if wWh.Code != http.StatusCreated {
+		t.Fatalf("Esperado 201 em POST /v1/webhooks, obtido %d: %s", wWh.Code, wWh.Body.String())
+	}
+
+	reqWhTest := httptest.NewRequest("POST", "/v1/webhooks/testar", strings.NewReader(`{"segredo":"meu-segredo-hmac","enviar_http":false}`))
+	reqWhTest.Header.Set("Content-Type", "application/json")
+	reqWhTest.Header.Set("X-API-Key", chaveTesteValida)
+	wWhTest := httptest.NewRecorder()
+	roteador.ServeHTTP(wWhTest, reqWhTest)
+	if wWhTest.Code != http.StatusOK {
+		t.Fatalf("Esperado 200 em POST /v1/webhooks/testar, obtido %d", wWhTest.Code)
+	}
+}

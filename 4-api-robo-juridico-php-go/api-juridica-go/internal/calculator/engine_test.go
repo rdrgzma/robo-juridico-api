@@ -152,4 +152,125 @@ func TestEngineCalculo_Lei14905(t *testing.T) {
 	t.Logf("  Abatimentos: R$ %s", resumo.TotalAbatimentos.String())
 	t.Logf("  Subtotal: R$ %s", resumo.SubtotalCondenacao.String())
 	t.Logf("  Total Geral: R$ %s", resumo.TotalGeralDevido.String())
+
+	// Verifica aliases unificados para o painel PHP
+	if !resumo.TotalGeral.Equal(resumo.TotalGeralDevido) {
+		t.Errorf("Alias TotalGeral (%s) difere de TotalGeralDevido (%s)", resumo.TotalGeral, resumo.TotalGeralDevido)
+	}
+	if len(resp.Itens) != len(resp.ItensLiquidados) {
+		t.Errorf("Alias Itens (%d) difere de ItensLiquidados (%d)", len(resp.Itens), len(resp.ItensLiquidados))
+	}
 }
+
+func TestEngineCalculo_TodosIndexadoresCadastradosComSemente(t *testing.T) {
+	repo := NovoRepositorioIndices()
+	indices := repo.ListarIndices()
+	if len(indices) < 27 {
+		t.Fatalf("Esperava pelo menos 27 indexadores cadastrados, encontrado: %d", len(indices))
+	}
+
+	dtIni, _ := ParseDataFlexivel("2023-03-01")
+	dtFim, _ := ParseDataFlexivel("2026-09-01")
+
+	for _, ind := range indices {
+		fator, err := repo.ObterFatorAcumulado(ind.Codigo, dtIni, dtFim, true)
+		if err != nil {
+			t.Errorf("Erro ao obter fator acumulado para %s: %v", ind.Codigo, err)
+		}
+		if ind.Codigo != "TAXA_LEGAL" && fator.LessThanOrEqual(decimal.NewFromInt(1)) {
+			t.Errorf("Esperava fator > 1.0 para o indexador %s entre 2023 e 2026, obtido: %s", ind.Codigo, fator.String())
+		}
+	}
+
+	// Testa aliases IGPDI e LEI_14905
+	fatorIGPDI, err := repo.ObterFatorAcumulado("IGPDI", dtIni, dtFim, true)
+	if err != nil || fatorIGPDI.LessThanOrEqual(decimal.NewFromInt(1)) {
+		t.Errorf("Alias IGPDI falhou: fator=%s, err=%v", fatorIGPDI.String(), err)
+	}
+}
+
+func TestEngineCalculo_Art354CC_JurosCompensatorios_ProRata(t *testing.T) {
+	repo := NovoRepositorioIndices()
+	engine := NovoEngineCalculo(repo)
+
+	req := CalculoJudicialRequest{
+		DataAtualizacao:        "2026-10-14",
+		IndexadorCodigo:        "TJMG",
+		AplicarDeflacao:        true,
+		AplicarProRataCorrecao: true,
+		ImputarArt354CC:        true,
+		JurosMora: JurosMoraConfig{
+			Tipo:              JurosLei14905,
+			PercentualMensal:  decimal.NewFromInt(1),
+			Modo:              CapitalizacaoSimples,
+			AplicarProRataDie: true,
+		},
+		JurosCompensatorios: JurosCompensatoriosConfig{
+			Ativo:      true,
+			TaxaMensal: decimal.NewFromFloat(0.5),
+			Modo:       CapitalizacaoSimples,
+		},
+		Parcelas: []ParcelaItem{
+			{
+				Descricao: "Débito Principal",
+				Tipo:      ParcelaDebito,
+				Data:      "2023-06-15", // Usa alias Data
+				ValorOriginal: decimal.NewFromInt(20000),
+			},
+			{
+				Descricao:      "Amortização Parcial Art. 354 CC",
+				Tipo:           ParcelaPagamentoParcial,
+				DataVencimento: "2025-01-15",
+				ValorOriginal:  decimal.NewFromInt(3000),
+			},
+		},
+	}
+
+	resp, err := engine.Executar(req)
+	if err != nil {
+		t.Fatalf("Erro no calculo com Art. 354 CC e Juros Compensatorios: %v", err)
+	}
+
+	if resp.Resumo.TotalJurosCompensatorios.LessThanOrEqual(decimal.Zero) {
+		t.Errorf("Esperava juros compensatorios > 0, obtido: %s", resp.Resumo.TotalJurosCompensatorios)
+	}
+	if !resp.Resumo.TotalAbatimentos.IsZero() {
+		t.Errorf("Com ImputarArt354CC=true, o abatimento deve ser imputado diretamente nos juros e principal")
+	}
+
+	// Testa exportação XLSX e CSV
+	csvBytes, err := ExportarMemoriaCSV(resp)
+	if err != nil || len(csvBytes) < 100 {
+		t.Errorf("Erro ao exportar CSV: %v", err)
+	}
+	xlsxBytes, err := ExportarMemoriaXLSX(resp)
+	if err != nil || len(xlsxBytes) < 200 {
+		t.Errorf("Erro ao exportar XLSX: %v", err)
+	}
+}
+
+func TestCalcularRevisaoFinanciamento_PriceSACGauss(t *testing.T) {
+	for _, sis := range []SistemaAmortizacao{SistemaPrice, SistemaSAC, SistemaGauss} {
+		resp, err := CalcularRevisaoFinanciamento(CalculoFinanciamentoRequest{
+			ValorFinanciado:      decimal.NewFromInt(50000),
+			NumeroParcelas:       36,
+			TaxaContratadaMensal: decimal.NewFromFloat(2.49),
+			TaxaMercadoMensal:    decimal.NewFromFloat(1.45),
+			SistemaAmortizacao:   sis,
+			RestituicaoEmDobro:   true,
+		})
+		if err != nil {
+			t.Fatalf("Erro na revisao de financiamento (%s): %v", sis, err)
+		}
+		if len(resp.TabelaEvolucao) != 36 {
+			t.Errorf("Esperava 36 parcelas na tabela %s, obtido %d", sis, len(resp.TabelaEvolucao))
+		}
+		if resp.DiferencaTotalSimples.LessThanOrEqual(decimal.Zero) {
+			t.Errorf("Esperava diferenca revisional positiva para %s, obtido %s", sis, resp.DiferencaTotalSimples)
+		}
+		if !resp.IndebitoCobrado.Equal(resp.DiferencaTotalSimples.Mul(decimal.NewFromInt(2)).Round(2)) {
+			t.Errorf("Esperava indebito em dobro exato em %s", sis)
+		}
+	}
+}
+

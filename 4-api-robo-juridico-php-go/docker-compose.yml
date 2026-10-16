@@ -4,7 +4,7 @@
 #
 # Arquitetura:
 # - api-juridica-go: Porta 8000 (Go 1.24, roteamento nativo, alta performance)
-# - painel-admin:    Porta 8080 (PHP 8.4, Laravel 13, Filament v5)
+# - painel-admin:    Porta 8080 (PHP 8.4, Laravel 11, Filament v3)
 # - SQLite WAL:      Volume compartilhado (/app/dados/api.db) para leitura e escrita concorrentes
 # ==============================================================================
 
@@ -21,6 +21,7 @@ services:
       - DB_PATH=/app/dados/api.db
       - LOG_LEVEL=info
       - APP_ENV=production
+      - API_CHAVES=painel-interno:teste-chave-secreta-longa-com-mais-de-32-caracteres
     volumes:
       - shared-dados:/app/dados
     restart: unless-stopped
@@ -48,6 +49,8 @@ services:
       - DB_DATABASE=/app/dados/api.db
       - SESSION_DRIVER=file
       - CACHE_STORE=file
+      - GO_API_URL=http://api-juridica-go:8000
+      - GO_API_KEY=teste-chave-secreta-longa-com-mais-de-32-caracteres
     volumes:
       - shared-dados:/app/dados
     depends_on:

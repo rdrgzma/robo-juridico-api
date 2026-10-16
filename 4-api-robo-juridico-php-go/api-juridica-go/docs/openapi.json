@@ -22,6 +22,9 @@
   "security": [
     {
       "ApiKeyAuth": []
+    },
+    {
+      "BearerAuth": []
     }
   ],
   "paths": {
@@ -292,6 +295,302 @@
           "401": { "$ref": "#/components/responses/NaoAutorizado" }
         }
       }
+    },
+    "/v1/calculos/indices": {
+      "get": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Listagem de Índices e Séries Econômicas",
+        "description": "Retorna todos os indexadores cadastrados (TJSP, IPCA, INPC, SELIC, Taxa Legal Lei 14.905/2024).",
+        "responses": {
+          "200": {
+            "description": "Lista de índices econômicos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true },
+                    "indices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "codigo": { "type": "string", "example": "TJSP" },
+                          "nome": { "type": "string", "example": "Tabela Prática TJSP" },
+                          "fonte": { "type": "string", "example": "Tribunal de Justiça de SP" },
+                          "periodicidade": { "type": "string", "example": "MENSAL" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/calculos/judicial": {
+      "post": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Liquidação Completa de Débitos e Créditos Judiciais",
+        "description": "Aplica correção monetária, juros moratórios (tradicionais ou Lei 14.905/2024), custas processuais, pagamentos parciais (art. 354 CC) e encargos da execução (Art. 523 CPC e Art. 85 CPC).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["data_atualizacao", "indexador_codigo", "parcelas"],
+                "properties": {
+                  "numero_processo": { "type": "string", "example": "1002345-67.2023.8.26.0100" },
+                  "data_atualizacao": { "type": "string", "example": "2026-10-14" },
+                  "indexador_codigo": { "type": "string", "example": "TJSP" },
+                  "aplicar_deflacao": { "type": "boolean", "example": true },
+                  "aplicar_prorata_correcao": { "type": "boolean", "example": false },
+                  "imputar_art_354_cc": { "type": "boolean", "example": false },
+                  "juros_mora": {
+                    "type": "object",
+                    "properties": {
+                      "tipo": { "type": "string", "enum": ["CONVENCIONAL_MENSAL", "TAXA_LEGAL", "LEI_14905", "SELIC", "SEM_JUROS"], "example": "CONVENCIONAL_MENSAL" },
+                      "percentual_mensal": { "type": "number", "example": 1.0 },
+                      "modo": { "type": "string", "enum": ["SIMPLES", "COMPOSTO"], "example": "COMPOSTO" },
+                      "aplicar_prorata_die": { "type": "boolean", "example": true }
+                    }
+                  },
+                  "juros_compensatorios": {
+                    "type": "object",
+                    "properties": {
+                      "aplicar": { "type": "boolean", "example": false },
+                      "taxa_mensal": { "type": "number", "example": 0.5 },
+                      "modo": { "type": "string", "enum": ["SIMPLES", "COMPOSTO"], "example": "SIMPLES" },
+                      "data_inicio": { "type": "string", "example": "2023-01-15" }
+                    }
+                  },
+                  "fase_execucao": {
+                    "type": "object",
+                    "properties": {
+                      "aplicar_art_523_multa": { "type": "boolean", "example": true },
+                      "aplicar_art_523_honorarios": { "type": "boolean", "example": true },
+                      "multa_moratoria_percentual": { "type": "number", "example": 10.0 }
+                    }
+                  },
+                  "parcelas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["tipo", "data_vencimento", "valor_original"],
+                      "properties": {
+                        "descricao": { "type": "string", "example": "Dano Material" },
+                        "tipo": { "type": "string", "enum": ["DEBITO", "CUSTA_PROCESSUAL", "DESPESA_PROCESSUAL", "PAGAMENTO_PARCIAL"], "example": "DEBITO" },
+                        "data_vencimento": { "type": "string", "example": "2023-01-15" },
+                        "valor_original": { "type": "number", "example": 10000.00 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cálculo judicial realizado com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sucesso": { "type": "boolean", "example": true },
+                    "resumo": { "type": "object" },
+                    "itens_liquidados": { "type": "array" },
+                    "itens": { "type": "array" }
+                  }
+                }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/RequisicaoInvalida" }
+        }
+      }
+    },
+    "/v1/calculos/financiamento": {
+      "post": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Revisão de Contratos Bancários (PRICE, SAC e GAUSS)",
+        "description": "Compara o sistema de amortização contratado (ex.: Tabela Price) com a taxa de mercado ou método linear de Gauss, apurando cobrança a maior e repetição do indébito (Art. 42 CDC).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["valor_financiado", "quantidade_parcelas", "taxa_mensal_contrato", "sistema_contratado"],
+                "properties": {
+                  "valor_financiado": { "type": "number", "example": 50000.00 },
+                  "quantidade_parcelas": { "type": "integer", "example": 36 },
+                  "taxa_mensal_contrato": { "type": "number", "example": 2.5 },
+                  "taxa_mensal_mercado": { "type": "number", "example": 1.5 },
+                  "sistema_contratado": { "type": "string", "enum": ["PRICE", "SAC", "GAUSS"], "example": "PRICE" },
+                  "sistema_revisado": { "type": "string", "enum": ["PRICE", "SAC", "GAUSS"], "example": "GAUSS" },
+                  "parcelas_pagas": { "type": "integer", "example": 12 },
+                  "data_primeira_parcela": { "type": "string", "example": "2024-01-15" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Revisão de financiamento calculada com sucesso."
+          },
+          "422": { "$ref": "#/components/responses/RequisicaoInvalida" }
+        }
+      }
+    },
+    "/v1/calculos/exportar-planilha": {
+      "post": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Exporta Memória de Cálculo em Planilha (.xlsx ou .csv)",
+        "description": "Liquida o cálculo judicial e retorna o arquivo binário em Excel (.xlsx) ou CSV (.csv).",
+        "parameters": [
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["xlsx", "csv"], "default": "xlsx" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Planilha da memória de cálculo gerada com sucesso."
+          }
+        }
+      }
+    },
+    "/v1/prazos/calcular": {
+      "post": {
+        "tags": ["Prazos Processuais"],
+        "summary": "Calculadora de Prazos Processuais (CPC/2015 e CLT)",
+        "description": "Calcula data de publicação, início do prazo e vencimento fatal considerando dias úteis (Art. 219 CPC), feriados nacionais/forenses, recesso forense (Art. 220 CPC) e prazo em dobro.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["data_referencia", "quantidade_dias"],
+                "properties": {
+                  "data_referencia": { "type": "string", "example": "2026-05-04" },
+                  "tipo_evento": { "type": "string", "enum": ["DISPONIBILIZACAO_DJE", "INTIMACAO_DIRETA"], "example": "DISPONIBILIZACAO_DJE" },
+                  "quantidade_dias": { "type": "integer", "example": 15 },
+                  "contagem": { "type": "string", "enum": ["DIAS_UTEIS", "DIAS_CORRIDOS"], "example": "DIAS_UTEIS" },
+                  "rito": { "type": "string", "enum": ["CPC", "CLT", "JUIZADO_ESPECIAL", "PENAL"], "example": "CPC" },
+                  "prazo_em_dobro": { "type": "boolean", "example": false },
+                  "suspender_recesso": { "type": "boolean", "example": true },
+                  "uf": { "type": "string", "example": "SP" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Prazo processual calculado com linha do tempo auditável."
+          }
+        }
+      }
+    },
+    "/v1/prazos/feriados": {
+      "get": {
+        "tags": ["Prazos Processuais"],
+        "summary": "Calendário de Feriados Nacionais, Móveis e Forenses",
+        "parameters": [
+          {
+            "name": "ano",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "example": 2026 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de feriados do ano."
+          }
+        }
+      }
+    },
+    "/v1/webhooks": {
+      "get": {
+        "tags": ["Webhooks"],
+        "summary": "Lista Assinaturas de Webhooks de Monitoramento Push",
+        "responses": {
+          "200": { "description": "Lista de webhooks cadastrados." }
+        }
+      },
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "Registra Novo Webhook de Monitoramento Push (Processo ou OAB)",
+        "responses": {
+          "201": { "description": "Webhook criado com sucesso." }
+        }
+      }
+    },
+    "/v1/webhooks/testar": {
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "Simula Disparo de Evento Push com Assinatura HMAC-SHA256",
+        "responses": {
+          "200": { "description": "Payload e assinatura HMAC-SHA256 gerados." }
+        }
+      }
+    },
+    "/v1/calculos/coletar": {
+      "post": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Dispara Coleta e Sincronização de Índices (Bacen, IBGE, Tribunais)",
+        "description": "Aciona manualmente o robô coletor para atualizar as séries de inflação, Selic e tabelas dos Tribunais de Justiça.",
+        "responses": {
+          "200": {
+            "description": "Relatório da sincronização executada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true },
+                    "relatorio": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/calculos/coletar/status": {
+      "get": {
+        "tags": ["Cálculos Judiciais"],
+        "summary": "Status do Worker Agendado de Coleta",
+        "description": "Retorna o status da última execução, se está em execução no momento e timestamp.",
+        "responses": {
+          "200": {
+            "description": "Status do worker de coleta.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean", "example": true },
+                    "em_execucao": { "type": "boolean", "example": false },
+                    "ultima_execucao": { "type": "string", "example": "2026-10-14T17:00:00Z" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -301,6 +600,12 @@
         "in": "header",
         "name": "X-API-Key",
         "description": "Chave de acesso atribuída ao cliente."
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Token",
+        "description": "Token de autoatendimento no formato rj_live_..."
       }
     },
     "headers": {
@@ -326,6 +631,14 @@
       }
     },
     "responses": {
+      "RequisicaoInvalida": {
+        "description": "Dados da requisição inválidos.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RespostaErro" }
+          }
+        }
+      },
       "NaoAutorizado": {
         "description": "Chave de acesso ausente ou inválida.",
         "content": {

@@ -29,15 +29,19 @@ Sistema web corporativo construído em **Laravel 11** e **Filament v3** sob arqu
 ## 👥 1. Painel do Administrador (`/admin`)
 
 Voltado exclusivamente para a equipe interna de gestão da plataforma:
-- **Gestão de Clientes:** Cadastro de empresas, definição de cotas mensais, limites por minuto, valores contratuais e liberação de senha para o portal.
-- **Gestão de Chaves de API:** Emissão, inspeção de prefixos e revogação imediata de tokens.
+- **Gestão de Clientes (`ClienteResource`):** Cadastro de empresas, definição de cotas mensais, limites por minuto, valores contratuais e liberação de senha para o portal.
+- **Gestão de Chaves de API (`ChaveResource`):** Emissão, inspeção de prefixos e revogação imediata de tokens.
+- **CRM de Laudos & Leads Captados (`CalculoSalvoResource` em `/admin/calculos-salvos`):**
+  - Funil comercial de leads captados na Calculadora Pública (*Novo*, *Contatado*, *Qualificado*, *Convertido*, *Perdido*).
+  - Botão de contato direto via **WhatsApp** já com a mensagem e link do laudo.
+  - Ação **"Converter em Cliente (1-Click)"** que cria automaticamente o cadastro do cliente no Portal e vincula o histórico de cálculos.
 - **Calculadora de Débitos Judiciais (`/admin/calculadora-judicial`):**
-  - Liquidação contábil com paridade com o DrCalc e aplicação da **Lei 14.905/2024**.
-  - Ação de cabeçalho **"Importar Planilha / Colar"** para subir arquivos `.xlsx`, `.csv` ou colar linhas do Excel (Ctrl+V).
-  - Emissão de Laudo Pericial Certificado com QR Code de integridade.
-- **Telemetria Global:** Histórico completo de todas as requisições atendidas pela API em Go.
-- **Trilha de Auditoria:** Registro de ações administrativas (criação de contas, alterações de plano, revogações).
-- **Widgets de Dashboard:** Faturamento MRR, volume de consultas globais, gráfico de 14 dias e bloqueios por cota (HTTP 402).
+  - Liquidação contábil com paridade com o DrCalc / PJe-Calc e aplicação da **Lei 14.905/2024** e **Art. 354 do Código Civil**.
+  - Botão **"Auto-Preencher pelo CNJ"** que identifica o Tribunal, seleciona o indexador estadual e preenche Valor da Causa, Data de Ajuizamento e Partes.
+  - Ação de cabeçalho **"Importar Planilha / Colar"** para subir arquivos `.xlsx`, `.csv` ou colar linhas do Excel (`Ctrl+V`).
+  - Emissão de Laudo Pericial Certificado com QR Code SVG matricial e exportação em Excel (`.xlsx`).
+- **Telemetria Global (`UsoResource`) & Trilha de Auditoria (`AuditoriaLogResource`).**
+- **Widgets de Dashboard:** Faturamento MRR, Laudos & Leads (CRM), volume de consultas globais, gráfico de 14 dias e bloqueios por cota (HTTP 402).
 
 **Acesso:** `http://localhost:8080/admin`
 - **E-mail:** `admin@empresa.com.br`
@@ -53,8 +57,12 @@ Ambiente de autoatendimento para o cliente/desenvolvedor contratante, com **isol
   - Exibição do token em texto puro uma única vez com persistência segura do SHA-256.
   - Revogação instantânea de chaves antigas ou comprometidas.
 - **Calculadora Judicial para Clientes (`/portal/calculadora-judicial`):**
-  - Acesso irrestrito ao liquidor judicial de alta precisão.
-  - Importação de planilhas e emissão de laudos oficiais para processos do escritório.
+  - Acesso irrestrito ao liquidante judicial de alta precisão com autopreenchimento por número CNJ.
+  - Importação/exportação de planilhas (`.xlsx` / `.csv`) e emissão de laudos oficiais automaticamente vinculados ao `cliente_id` autenticado.
+- **Meus Cálculos Salvos (`MeuCalculoResource` em `/portal/meus-calculos`):**
+  - Histórico completo dos cálculos e laudos emitidos pelo escritório.
+  - Ação **"Atualizar para Hoje (1-Click)"** que recalcula qualquer memória de cálculo antiga para a data atual com um clique, gerando novo hash SHA-256.
+  - Download direto em PDF A4 ou planilha Excel (`.xlsx`).
 - **Meu Consumo & Quotas (`MinhaCotaWidget` & `MeuConsumoChartWidget`):**
   - Barra de progresso da cota mensal (ex: *1.250 / 5.000 consultas utilizadas*).
   - Alerta visual em caso de consumo elevado (>80%) ou franquia esgotada (100%).
@@ -77,11 +85,12 @@ Ambiente de autoatendimento para o cliente/desenvolvedor contratante, com **isol
 
 Página de conversão de alto impacto e utilidade real para captação de advogados, peritos e escritórios:
 - **Interface Pública:** Construída com Tailwind CSS, sem necessidade de login.
-- **Liquidação em Tempo Real:** Chamadas assíncronas (AJAX) para o motor em Go.
-- **26+ Tabelas Oficiais:** TJSP, TJRJ, TJMG, TJRS, TJPR, TRF, TST, IPCA, INPC, Selic e Taxa Legal Bacen.
-- **Importador de Planilha:** Botões para importar arquivos `.xlsx`, `.csv` ou colar linhas diretamente do Excel.
+- **1-Click Auto-Fill por CNJ (`POST /calculadora/identificar-processo`):** Identifica o tribunal pelo número CNJ, seleciona automaticamente a tabela prática correspondente e preenche metadados do processo.
+- **Liquidação em Tempo Real:** Chamadas assíncronas (AJAX) para o motor em Go com suporte a **Art. 354 CC** (imputação de pagamentos parciais) e **Lei 14.905/2024**.
+- **27 Tabelas Oficiais:** TJSP, TJRJ, TJMG, TJRS, TJPR, TRF, TST, IPCA, IPCA-15, INPC, Selic, CDI, IGP-M, IGP-DI, INCC, TR, Poupança e Taxa Legal Bacen.
+- **Importador e Exportador de Planilha:** Botões para importar arquivos `.xlsx`, `.csv` ou colar linhas do Excel, além de exportar a memória de cálculo liquidada em `.xlsx` (`POST /calculadora/exportar-planilha`).
 - **Modal Lead Magnet:** Ao solicitar o download do Laudo em PDF, solicita os dados do profissional (Nome, E-mail, WhatsApp, OAB/Empresa) e registra na tabela `calculos_salvos`.
-- **Laudo Pericial Certificado (`/laudo/{uuid}/imprimir`):** Layout formal A4 para peticionamento, com resumo metodológico, planilha analítica, totais consolidados e **QR Code de autenticidade**.
+- **Laudo Pericial Certificado (`/laudo/{uuid}/imprimir` e `/laudo/{uuid}/exportar`):** Layout formal A4 para peticionamento, com resumo metodológico, planilha analítica, totais consolidados, botão de download Excel e **QR Code SVG matricial nativo (`App\Services\QrCodeGenerator`)**.
 - **Selo Digital de Autenticidade (`/validar/{uuid}`):** Verificação criptográfica via hash SHA-256 acessível por qualquer celular ao ler o QR Code do laudo.
 
 ---

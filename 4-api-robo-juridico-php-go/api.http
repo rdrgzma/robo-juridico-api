@@ -163,3 +163,141 @@ GET {{base}}/v1/calculos/coletar/status
 X-API-Key: {{chave}}
 Accept: application/json
 
+### 17. Liquidação Judicial com Imputação pelo Art. 354 CC, Juros Compensatórios e Correção Pro Rata Die
+POST {{base}}/v1/calculos/judicial
+X-API-Key: {{chave}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "numero_processo": "5010754-07.2024.8.13.0625",
+  "data_atualizacao": "2026-10-14",
+  "indexador_codigo": "TJMG",
+  "aplicar_deflacao": true,
+  "aplicar_prorata_correcao": true,
+  "imputar_art_354_cc": true,
+  "juros_mora": {
+    "tipo": "TAXA_LEGAL",
+    "percentual_mensal": 1.0,
+    "modo": "SIMPLES",
+    "aplicar_prorata_die": true
+  },
+  "juros_compensatorios": {
+    "aplicar": true,
+    "taxa_mensal": 0.5,
+    "modo": "SIMPLES"
+  },
+  "parcelas": [
+    {
+      "numero_item": 1,
+      "descricao": "Condenação Principal",
+      "tipo": "DEBITO",
+      "data_vencimento": "2024-01-15",
+      "valor_original": 20000.00
+    },
+    {
+      "numero_item": 2,
+      "descricao": "Amortização Parcial (Art. 354 CC)",
+      "tipo": "PAGAMENTO_PARCIAL",
+      "data_vencimento": "2025-01-15",
+      "valor_original": 4000.00
+    }
+  ]
+}
+
+### 18. Exportar Memória de Cálculo em Excel (.xlsx) ou CSV (.csv)
+POST {{base}}/v1/calculos/exportar-planilha?formato=xlsx
+X-API-Key: {{chave}}
+Content-Type: application/json
+
+{
+  "numero_processo": "1002345-67.2023.8.26.0100",
+  "data_atualizacao": "2026-10-14",
+  "indexador_codigo": "TJSP",
+  "juros_mora": {
+    "tipo": "CONVENCIONAL_MENSAL",
+    "percentual_mensal": 1.0,
+    "modo": "SIMPLES",
+    "aplicar_prorata_die": true
+  },
+  "parcelas": [
+    {
+      "numero_item": 1,
+      "descricao": "Principal",
+      "tipo": "DEBITO",
+      "data_vencimento": "2024-01-15",
+      "valor_original": 10000.00
+    }
+  ]
+}
+
+### 19. Revisão de Contrato Bancário (Tabela Price vs Método de Gauss + Art. 42 CDC)
+POST {{base}}/v1/calculos/financiamento
+X-API-Key: {{chave}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "valor_financiado": 50000.00,
+  "quantidade_parcelas": 36,
+  "taxa_mensal_contrato": 2.49,
+  "taxa_mensal_mercado": 1.45,
+  "sistema_contratado": "PRICE",
+  "sistema_revisado": "GAUSS",
+  "parcelas_pagas": 18,
+  "data_primeira_parcela": "2024-01-15"
+}
+
+### 20. Calculadora de Prazos Processuais Fatais (CPC/2015 Art. 224 e Recesso Art. 220)
+POST {{base}}/v1/prazos/calcular
+X-API-Key: {{chave}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "data_referencia": "2026-05-04",
+  "tipo_evento": "DISPONIBILIZACAO_DJE",
+  "quantidade_dias": 15,
+  "contagem": "DIAS_UTEIS",
+  "rito": "CPC",
+  "prazo_em_dobro": false,
+  "suspender_recesso": true,
+  "uf": "SP"
+}
+
+### 21. Consultar Feriados Nacionais, Móveis e Forenses do Ano
+GET {{base}}/v1/prazos/feriados?ano=2026
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 22. Cadastrar Webhook de Monitoramento Push (Processo ou OAB)
+POST {{base}}/v1/webhooks
+X-API-Key: {{chave}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "cliente": "Escritório Silva",
+  "url_destino": "https://meuerp.com.br/webhooks/intimacoes",
+  "segredo_hmac": "segredo-super-seguro-2026",
+  "tipo_monitoramento": "OAB",
+  "filtro_valor": "MG123456"
+}
+
+### 23. Listar Webhooks de Monitoramento Push
+GET {{base}}/v1/webhooks
+X-API-Key: {{chave}}
+Accept: application/json
+
+### 24. Simular Disparo de Webhook Push com Assinatura HMAC-SHA256
+POST {{base}}/v1/webhooks/testar
+X-API-Key: {{chave}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "segredo_hmac": "segredo-super-seguro-2026",
+  "evento": "nova_publicacao_djen",
+  "processo": "5010754-07.2024.8.13.0625"
+}
+

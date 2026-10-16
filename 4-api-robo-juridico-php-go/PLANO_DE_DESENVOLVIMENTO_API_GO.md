@@ -2,27 +2,26 @@
 
 > **Projeto:** Robô Jurídico — Core Engine de Alta Performance em Go  
 > **Localização de Destino:** `4-api-robo-juridico-php-go/api-juridica-go`  
-> **Status:** Planejamento Aprovado (Aguardando Sinal Verde para Implementação)  
-> **Versão do Documento:** 1.0.0  
+> **Status:** 100% Implementado, Integrado e Validado por Testes Automatizados  
+> **Versão do Documento:** 2.0.0  
 > **Data:** Outubro de 2026  
 
 ---
 
 ## 1. Escopo e Diretrizes do Projeto
 
-Este plano estabelece a especificação completa de engenharia, arquitetura de pacotes, modelos de dados, fluxo de concorrência e suite de testes para a reescrita do *Core Engine* de consulta da **API Jurídica em Go (Golang)**.
+Este documento consolida a especificação de engenharia, arquitetura de pacotes, modelos de dados, fluxo de concorrência e suíte de testes do *Core Engine* da **API Jurídica em Go (Golang)**.
 
 ### 1.1. Premissas Arquiteturais
-1. **Foco no Core da API:** Este projeto em Go implementará exclusivamente a **API REST pública de alta performance** (`/v1/...`), deixando o painel administrativo para o projeto PHP (`painel/`).
-2. **Compatibilidade Rigorosa de Contrato:** Todas as rotas, query params, schemas JSON de entrada e saída, códigos de status HTTP e cabeçalhos (`X-API-Key`, `X-Cota-Limite`, `X-Cota-Restante`, `X-Request-ID`) serão **100% idênticos** à especificação atual do Python, garantindo interoperabilidade transparente.
-3. **Padrão Idiomático em Go:** Estruturação seguindo as convenções canônicas da comunidade Go (*Standard Go Project Layout*), com tipagem estrita, cancelamento por `context.Context` e isolamento de dependências.
-4. **Zero Código nesta Etapa:** Nenhuma linha de código `.go` será criada até a aprovação e alinhamento deste plano.
+1. **Foco no Core da API:** Este projeto em Go implementa a **API REST pública de alta performance** (`/v1/...`), integrada ao painel administrativo e portal do cliente em PHP (`painel/`).
+2. **Compatibilidade Rigorosa de Contrato:** Todas as rotas, query params, schemas JSON de entrada e saída, códigos de status HTTP e cabeçalhos (`X-API-Key`, `X-Cota-Limite`, `X-Cota-Restante`, `X-Request-ID`) mantêm interoperabilidade transparente.
+3. **Padrão Idiomático em Go:** Estruturação seguindo as convenções canônicas da comunidade Go (*Standard Go Project Layout*), com tipagem estrita, cancelamento por `context.Context` e zero dependência de CGO (`CGO_ENABLED=0`).
 
 ---
 
 ## 2. Especificação Completa dos Endpoints da API
 
-A API em Go atenderá aos seguintes endpoints:
+A API em Go atende aos seguintes endpoints:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -35,8 +34,21 @@ A API em Go atenderá aos seguintes endpoints:
 │ /v1/processos/{numero}/existe          │ GET     │ Não (0 cota) │ Checagem preliminar  │
 │ /v1/conta                              │ GET     │ Não (0 cota) │ Saldo do mês e plano │
 │ /v1/processos/{numero}                 │ GET     │ Sim (1 cota) │ Processo unificado   │
+│ /v1/processos/consultar                │ POST    │ Sim (1 cota) │ Consulta via JSON    │
 │ /v1/oab/{uf}/{numero}/processos        │ GET     │ Sim (1 cota) │ Processos por OAB    │
 │ /v1/oab/{uf}/{numero}/publicacoes      │ GET     │ Sim (1 cota) │ Diário DJEN por OAB  │
+│ /v1/calculos/indices                   │ GET     │ Não (0 cota) │ 27 índices oficiais  │
+│ /v1/calculos/indices/{codigo}/serie    │ GET     │ Não (0 cota) │ Série histórica      │
+│ /v1/calculos/judicial                  │ POST    │ Não (0 cota) │ Liquidação judicial  │
+│ /v1/calculos/financiamento             │ POST    │ Não (0 cota) │ Revisão Price/Gauss  │
+│ /v1/calculos/importar-planilha         │ POST    │ Não (0 cota) │ Importador .xlsx/csv │
+│ /v1/calculos/exportar-planilha         │ POST    │ Não (0 cota) │ Exportador .xlsx/csv │
+│ /v1/calculos/coletar                   │ POST    │ Não (0 cota) │ Coleta Bacen/IBGE    │
+│ /v1/calculos/coletar/status            │ GET     │ Não (0 cota) │ Status do coletor    │
+│ /v1/prazos/calcular                    │ POST    │ Não (0 cota) │ Prazos CPC e CLT     │
+│ /v1/prazos/feriados                    │ GET     │ Não (0 cota) │ Feriados forenses    │
+│ /v1/webhooks                           │ GET/POST│ Não (0 cota) │ Gestão de Webhooks   │
+│ /v1/webhooks/testar                    │ POST    │ Não (0 cota) │ Teste HMAC-SHA256    │
 │ /docs e /openapi.json                  │ GET     │ Não (Livre)  │ Swagger interativo   │
 └────────────────────────────────────────┴─────────┴──────────────┴──────────────────────┘
 ```
