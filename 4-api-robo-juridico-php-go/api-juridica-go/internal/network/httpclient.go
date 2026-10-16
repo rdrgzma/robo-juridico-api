@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -44,15 +45,23 @@ func (r *RespostaHTTP) OK() bool {
 }
 
 type ClienteHTTP struct {
-	clientePadrao *http.Client
+	clientePadrao  *http.Client
 	UserAgentExtra string
 }
 
 func NovoClienteHTTP(timeout time.Duration, userAgentExtra string) *ClienteHTTP {
+	dialer := &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
 	transport := &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 20,
-		IdleConnTimeout:     90 * time.Second,
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          200,
+		MaxIdleConnsPerHost:   50,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
 	return &ClienteHTTP{
 		clientePadrao: &http.Client{

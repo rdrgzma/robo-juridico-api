@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/cache"
@@ -40,7 +39,7 @@ func (o *Orquestrador) ConsultarProcessoDetalhado(ctx context.Context, numero st
 		return nil, nil, domain.ErrNumeroInvalido
 	}
 
-	var avisos []string
+	avisos := []string{}
 
 	// Modo rápido: somente DJEN
 	if modo == "rapido" {
@@ -55,28 +54,45 @@ func (o *Orquestrador) ConsultarProcessoDetalhado(ctx context.Context, numero st
 		return proc, avisos, nil
 	}
 
-	// Modo completo: DataJud e DJEN em paralelo
-	var wg sync.WaitGroup
-	var procDataJud *domain.Processo
-	var errDataJud error
-	var pubsDJEN []domain.Publicacao
-	var errDJEN error
+	// Modo completo: DataJud e DJEN em paralelo com fast-fallback se o DataJud demorar demais
+	type resDJ struct {
+		proc *domain.Processo
+		err  error
+	}
+	chDJ := make(chan resDJ, 1)
 
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
-		procDataJud, errDataJud = o.buscarDataJudComCache(ctx, procCNJ.Formatado, procCNJ.Digitos)
+		// Usa contexto desacoplado do cancelamento imediato para aquecer o cache em background caso o fast-fallback retorne antes
+		ctxBg, cancelBg := context.WithTimeout(context.WithoutCancel(ctx), 25*time.Second)
+		defer cancelBg()
+		p, err := o.buscarDataJudComCache(ctxBg, procCNJ.Formatado, procCNJ.Digitos)
+		chDJ <- resDJ{proc: p, err: err}
 	}()
 
+	var pubsDJEN []domain.Publicacao
+	var errDJEN error
 	if comPublicacoes {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			pubsDJEN, errDJEN = o.buscarDJENComCache(ctx, procCNJ.Digitos)
-		}()
+		pubsDJEN, errDJEN = o.buscarDJENComCache(ctx, procCNJ.Digitos)
 	}
 
-	wg.Wait()
+	var procDataJud *domain.Processo
+	var errDataJud error
+
+	// Se o DJEN já trouxe publicações rapidamente, aguarda o DataJud por no máximo mais 4.5s (evita travar 27s em tribunais lentos)
+	timeoutEsperaDJ := 12 * time.Second
+	if len(pubsDJEN) > 0 {
+		timeoutEsperaDJ = 4500 * time.Millisecond
+	}
+
+	select {
+	case r := <-chDJ:
+		procDataJud = r.proc
+		errDataJud = r.err
+	case <-time.After(timeoutEsperaDJ):
+		avisos = append(avisos, "O DataJud demorou além do limite rápido; dados consolidados via DJEN (o histórico completo está sendo sincronizado em cache).")
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
 
 	if errDataJud != nil {
 		avisos = append(avisos, "O DataJud não respondeu a tempo, então o histórico profundo de andamentos ficou de fora.")
@@ -90,18 +106,19 @@ func (o *Orquestrador) ConsultarProcessoDetalhado(ctx context.Context, numero st
 		return nil, avisos, nil
 	}
 
-	// Apenas o DJEN encontrou (ex: processo recém-distribuído)
+	// Apenas o DJEN encontrou (ou respondeu dentro do SLA rápido)
 	if procDataJud == nil && len(pubsDJEN) > 0 {
 		proc := o.montarProcessoDasPublicacoes(procCNJ, pubsDJEN)
 		return proc, avisos, nil
 	}
 
-	// DataJud encontrou: mescla com as publicações do diário se houver
+	// DataJud encontrou: clona superficialmente antes de mesclar para não poluir ponteiro em cache
+	procFinal := *procDataJud
 	if len(pubsDJEN) > 0 {
-		o.juntarPublicacoes(procDataJud, pubsDJEN)
+		o.juntarPublicacoes(&procFinal, pubsDJEN)
 	}
 
-	return procDataJud, avisos, nil
+	return &procFinal, avisos, nil
 }
 
 func (o *Orquestrador) buscarDataJudComCache(ctx context.Context, formatado, digitos string) (*domain.Processo, error) {
@@ -140,9 +157,21 @@ func (o *Orquestrador) montarProcessoDasPublicacoes(procCNJ *cnj.ProcessoCNJ, pu
 
 	partesMap := make(map[string]domain.Parte)
 	advsMap := make(map[string]domain.Advogado)
+	comarca := ""
+	assunto := ""
+	var valorCausa *float64
 
 	var movs []domain.Movimentacao
 	for _, pub := range pubs {
+		if comarca == "" {
+			comarca = comunica.InferirComarcaPorOrigem(procCNJ.Tribunal, procCNJ.OrigemCodigo, pub.Orgao, pub.Texto)
+		}
+		if valorCausa == nil {
+			valorCausa = comunica.ExtrairValorCausaDoTexto(pub.Texto)
+		}
+		if assunto == "" && pub.TipoDocumento != "" && !strings.EqualFold(pub.TipoDocumento, pub.TipoComunicacao) {
+			assunto = pub.TipoDocumento
+		}
 		for _, parte := range pub.Partes {
 			if _, ok := partesMap[parte.Nome]; !ok || partesMap[parte.Nome].Polo == domain.PoloTerceiro {
 				partesMap[parte.Nome] = parte
@@ -167,13 +196,30 @@ func (o *Orquestrador) montarProcessoDasPublicacoes(procCNJ *cnj.ProcessoCNJ, pu
 		})
 	}
 
-	var partes []domain.Parte
+	if comarca == "" {
+		comarca = comunica.InferirComarcaPorOrigem(procCNJ.Tribunal, procCNJ.OrigemCodigo, primeira.Orgao, "")
+	}
+	if assunto == "" {
+		assunto = primeira.Classe
+	}
+
+	partes := []domain.Parte{}
 	for _, p := range partesMap {
 		partes = append(partes, p)
 	}
-	var advs []domain.Advogado
+	advs := []domain.Advogado{}
 	for _, a := range advsMap {
 		advs = append(advs, a)
+	}
+
+	var dataAjuizamento *time.Time
+	dataAjuizamentoFormatada := ""
+	if len(movs) > 0 {
+		maisAntiga := movs[len(movs)-1].Data
+		if !maisAntiga.IsZero() {
+			dataAjuizamento = &maisAntiga
+			dataAjuizamentoFormatada = maisAntiga.Format("02/01/2006")
+		}
 	}
 
 	proc := &domain.Processo{
@@ -181,9 +227,16 @@ func (o *Orquestrador) montarProcessoDasPublicacoes(procCNJ *cnj.ProcessoCNJ, pu
 		NumeroDigitos:                  procCNJ.Digitos,
 		Tribunal:                       procCNJ.Tribunal,
 		Segmento:                       procCNJ.NomeSegmento,
+		Grau:                           comunica.InferirGrau(primeira.Orgao, primeira.Classe),
 		Classe:                         primeira.Classe,
+		Assunto:                        assunto,
 		OrgaoJulgador:                  primeira.Orgao,
+		Comarca:                        comarca,
 		Link:                           primeira.Link,
+		ValorCausa:                     valorCausa,
+		ValorCausaFormatado:            datajud.FormatarDinheiroBR(valorCausa),
+		DataAjuizamento:                dataAjuizamento,
+		DataAjuizamentoFormatada:       dataAjuizamentoFormatada,
 		DataUltimaMovimentacao:         primeira.DataDisponibilizacao,
 		DataUltimaMovimentacaoFormatada: primeira.DataFormatada,
 		Partes:                         partes,
@@ -224,6 +277,35 @@ func (o *Orquestrador) juntarPublicacoes(proc *domain.Processo, pubs []domain.Pu
 		proc.Link = pubs[0].Link
 	}
 
+	pCNJ := cnj.Parse(proc.Numero)
+
+	// Extrai comarca exata da publicação ou do código de origem CNJ caso o DataJud não tenha informado (ou tenha vindo genérica da Turma Recursal)
+	if proc.Comarca == "" || strings.Contains(proc.Comarca, ",") {
+		for _, pub := range pubs {
+			if c := comunica.InferirComarcaPorOrigem(proc.Tribunal, pCNJ.OrigemCodigo, pub.Orgao, pub.Texto); c != "" {
+				proc.Comarca = c
+				break
+			}
+		}
+	}
+	if proc.Comarca == "" {
+		proc.Comarca = comunica.InferirComarcaPorOrigem(proc.Tribunal, pCNJ.OrigemCodigo, proc.OrgaoJulgador, "")
+	}
+
+	if proc.Grau == "" {
+		proc.Grau = comunica.InferirGrau(proc.OrgaoJulgador, proc.Classe)
+	}
+
+	if proc.ValorCausa == nil {
+		for _, pub := range pubs {
+			if v := comunica.ExtrairValorCausaDoTexto(pub.Texto); v != nil {
+				proc.ValorCausa = v
+				proc.ValorCausaFormatado = datajud.FormatarDinheiroBR(v)
+				break
+			}
+		}
+	}
+
 	// Deduplicação de movimentos
 	jaTem := make(map[string]bool)
 	for _, m := range proc.Movimentacoes {
@@ -251,20 +333,39 @@ func (o *Orquestrador) juntarPublicacoes(proc *domain.Processo, pubs []domain.Pu
 		}
 	}
 
+	// Preenche orgao e link padrão nos movimentos que não possuírem
+	for i := range proc.Movimentacoes {
+		if proc.Movimentacoes[i].Orgao == "" && proc.OrgaoJulgador != "" {
+			proc.Movimentacoes[i].Orgao = proc.OrgaoJulgador
+		}
+		if proc.Movimentacoes[i].Link == "" && proc.Link != "" {
+			proc.Movimentacoes[i].Link = proc.Link
+		}
+	}
+
 	// Ordena movimentos do mais recente para o mais antigo
 	sort.Slice(proc.Movimentacoes, func(i, j int) bool {
 		return proc.Movimentacoes[i].Data.After(proc.Movimentacoes[j].Data)
 	})
 
+	if proc.DataAjuizamento == nil && len(proc.Movimentacoes) > 0 {
+		maisAntiga := proc.Movimentacoes[len(proc.Movimentacoes)-1].Data
+		if !maisAntiga.IsZero() {
+			proc.DataAjuizamento = &maisAntiga
+			proc.DataAjuizamentoFormatada = maisAntiga.Format("02/01/2006")
+		}
+	}
+
 	// Enriquece partes e advogados do DataJud com o que veio do diário
 	nomesPartes := make(map[string]bool)
 	for _, p := range proc.Partes {
-		nomesPartes[p.Nome] = true
+		nomesPartes[strings.ToUpper(strings.TrimSpace(p.Nome))] = true
 	}
 	for _, pub := range pubs {
 		for _, parte := range pub.Partes {
-			if !nomesPartes[parte.Nome] {
-				nomesPartes[parte.Nome] = true
+			chave := strings.ToUpper(strings.TrimSpace(parte.Nome))
+			if !nomesPartes[chave] {
+				nomesPartes[chave] = true
 				proc.Partes = append(proc.Partes, parte)
 			}
 		}
@@ -305,20 +406,29 @@ func (o *Orquestrador) Existe(ctx context.Context, numero string) (bool, string,
 		return false, "", domain.ErrNumeroInvalido
 	}
 
-	// Checa DataJud primeiro com timeout curto
-	ctxDJ, cancel := context.WithTimeout(ctx, 10*time.Second)
-	p, err := o.datajudClient.ConsultarProcesso(ctxDJ, procCNJ.Formatado)
-	cancel()
-	if err == nil && p != nil {
-		return true, string(domain.FonteDataJud), nil
+	type resExiste struct {
+		existe bool
+		fonte  string
 	}
+	ch := make(chan resExiste, 2)
+	ctxBusca, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
 
-	// Checa DJEN
-	ctxCom, cancelCom := context.WithTimeout(ctx, 10*time.Second)
-	pubs, err := o.comunicaClient.PublicacoesDoProcesso(ctxCom, procCNJ.Digitos, time.Time{}, time.Time{})
-	cancelCom()
-	if err == nil && len(pubs) > 0 {
-		return true, string(domain.FonteComunica), nil
+	go func() {
+		pubs, err := o.buscarDJENComCache(ctxBusca, procCNJ.Digitos)
+		ch <- resExiste{existe: err == nil && len(pubs) > 0, fonte: string(domain.FonteComunica)}
+	}()
+
+	go func() {
+		p, err := o.buscarDataJudComCache(ctxBusca, procCNJ.Formatado, procCNJ.Digitos)
+		ch <- resExiste{existe: err == nil && p != nil, fonte: string(domain.FonteDataJud)}
+	}()
+
+	for i := 0; i < 2; i++ {
+		r := <-ch
+		if r.existe {
+			return true, r.fonte, nil
+		}
 	}
 
 	return false, "", nil
@@ -347,7 +457,7 @@ func (o *Orquestrador) BuscarPorOAB(ctx context.Context, oabNumero, oabUF, tribu
 		agrupados[pCNJ.Formatado] = append(agrupados[pCNJ.Formatado], pub)
 	}
 
-	var resumos []domain.ResumoProcesso
+	resumos := []domain.ResumoProcesso{}
 	for num, lista := range agrupados {
 		sort.Slice(lista, func(i, j int) bool {
 			return lista[i].DataDisponibilizacao > lista[j].DataDisponibilizacao
@@ -355,9 +465,32 @@ func (o *Orquestrador) BuscarPorOAB(ctx context.Context, oabNumero, oabUF, tribu
 		primeira := lista[0]
 		pCNJ := cnj.Parse(num)
 
+		// Monta título com as partes se disponíveis nas publicações; caso contrário, usa a classe
+		partesMap := make(map[string]domain.Parte)
+		for _, pub := range lista {
+			for _, parte := range pub.Partes {
+				chave := strings.ToUpper(strings.TrimSpace(parte.Nome))
+				if _, ok := partesMap[chave]; !ok || partesMap[chave].Polo == domain.PoloTerceiro {
+					partesMap[chave] = parte
+				}
+			}
+		}
+		var partesProc []domain.Parte
+		for _, p := range partesMap {
+			partesProc = append(partesProc, p)
+		}
+		polosProc := domain.Polos{
+			Ativo:   filtrarPolo(partesProc, domain.PoloAtivo),
+			Passivo: filtrarPolo(partesProc, domain.PoloPassivo),
+		}
+		titulo := montarTitulo(polosProc)
+		if titulo == "— × —" || strings.TrimSpace(titulo) == "" {
+			titulo = primeira.Classe
+		}
+
 		resumos = append(resumos, domain.ResumoProcesso{
 			Numero:                         num,
-			Titulo:                         primeira.Classe,
+			Titulo:                         titulo,
 			Tribunal:                       pCNJ.Tribunal,
 			Classe:                         primeira.Classe,
 			OrgaoJulgador:                  primeira.Orgao,
@@ -379,7 +512,7 @@ func (o *Orquestrador) PublicacoesPorOAB(ctx context.Context, oabNumero, oabUF s
 }
 
 func filtrarPolo(partes []domain.Parte, polo domain.Polo) []domain.Parte {
-	var filtradas []domain.Parte
+	filtradas := []domain.Parte{}
 	for _, p := range partes {
 		if p.Polo == polo {
 			filtradas = append(filtradas, p)

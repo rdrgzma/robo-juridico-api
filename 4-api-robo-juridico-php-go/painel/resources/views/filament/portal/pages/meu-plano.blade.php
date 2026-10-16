@@ -2,45 +2,47 @@
     <div class="space-y-6">
         @if ($this->cliente)
             <!-- Informações do Contrato / Plano -->
-            <div class="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Dados Cadastrais & Contratuais</h3>
-                
+            <x-filament::section>
+                <x-slot name="heading">
+                    Dados Cadastrais & Contratuais
+                </x-slot>
+
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
                     <div>
-                        <span class="text-gray-500 dark:text-gray-400 block">Razão Social / Nome</span>
-                        <strong class="text-gray-900 dark:text-white">{{ $this->cliente->empresa ?: $this->cliente->nome }}</strong>
+                        <span class="text-gray-500 dark:text-gray-400 block text-xs uppercase font-medium">Razão Social / Nome</span>
+                        <strong class="text-gray-900 dark:text-white font-semibold">{{ $this->cliente->empresa ?: $this->cliente->nome }}</strong>
                     </div>
 
                     <div>
-                        <span class="text-gray-500 dark:text-gray-400 block">E-mail de Login</span>
-                        <strong class="text-gray-900 dark:text-white">{{ $this->cliente->email }}</strong>
+                        <span class="text-gray-500 dark:text-gray-400 block text-xs uppercase font-medium">E-mail de Login</span>
+                        <strong class="text-gray-900 dark:text-white font-semibold">{{ $this->cliente->email }}</strong>
                     </div>
 
                     <div>
-                        <span class="text-gray-500 dark:text-gray-400 block">Plano Contratado</span>
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 uppercase">
-                            {{ $this->cliente->plano }}
-                        </span>
+                        <span class="text-gray-500 dark:text-gray-400 block text-xs uppercase font-medium mb-1">Plano Contratado</span>
+                        <x-filament::badge color="success">
+                            {{ strtoupper($this->cliente->plano) }}
+                        </x-filament::badge>
                     </div>
 
                     <div>
-                        <span class="text-gray-500 dark:text-gray-400 block">Franquia Mensal</span>
-                        <strong class="text-gray-900 dark:text-white">{{ number_format($this->cliente->limite_mensal, 0, ',', '.') }} consultas</strong>
+                        <span class="text-gray-500 dark:text-gray-400 block text-xs uppercase font-medium">Franquia Mensal</span>
+                        <strong class="text-gray-900 dark:text-white font-semibold">{{ number_format($this->cliente->limite_mensal, 0, ',', '.') }} consultas</strong>
                     </div>
 
                     <div>
-                        <span class="text-gray-500 dark:text-gray-400 block">Taxa Máxima por Minuto</span>
-                        <strong class="text-gray-900 dark:text-white">{{ $this->cliente->limite_por_minuto }} req/min</strong>
+                        <span class="text-gray-500 dark:text-gray-400 block text-xs uppercase font-medium">Taxa Máxima por Minuto</span>
+                        <strong class="text-gray-900 dark:text-white font-semibold">{{ $this->cliente->limite_por_minuto }} req/min</strong>
                     </div>
 
                     <div>
-                        <span class="text-gray-500 dark:text-gray-400 block">Situação da Conta</span>
-                        <strong class="{{ $this->cliente->ativo ? 'text-green-600' : 'text-red-600' }}">
+                        <span class="text-gray-500 dark:text-gray-400 block text-xs uppercase font-medium mb-1">Situação da Conta</span>
+                        <x-filament::badge :color="$this->cliente->ativo ? 'success' : 'danger'">
                             {{ $this->cliente->ativo ? 'Ativa e Regular' : 'Suspensa' }}
-                        </strong>
+                        </x-filament::badge>
                     </div>
                 </div>
-            </div>
+            </x-filament::section>
         @endif
 
         <!-- Formulário de Alteração de Senha -->

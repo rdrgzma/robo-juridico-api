@@ -61,4 +61,12 @@ class Uso extends Model
             return $this->momento;
         }
     }
+
+    /**
+     * Retorna o endpoint/rota, com fallback para o caminho registrado.
+     */
+    public function getRotaAttribute($value): string
+    {
+        return !empty($value) ? $value : (!empty($this->attributes['caminho'] ?? null) ? $this->attributes['caminho'] : '');
+    }
 }

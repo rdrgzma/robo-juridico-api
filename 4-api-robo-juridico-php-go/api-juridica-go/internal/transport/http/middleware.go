@@ -24,7 +24,15 @@ const (
 	identidadeKey contextKey = "identidade"
 	usoIDKey      contextKey = "uso_id"
 	cotaInfoKey   contextKey = "cota_info"
+	auditStateKey contextKey = "audit_state"
 )
+
+// AuditState armazena o estado mutável da requisição para auditoria e finalização
+type AuditState struct {
+	UsoID      int64
+	CotaInfo   *CotaInfo
+	Identidade *auth.Identidade
+}
 
 // CotaInfo armazena dados de consumo de cota durante o ciclo da requisição
 type CotaInfo struct {
@@ -76,7 +84,7 @@ type statusRecorder struct {
 	http.ResponseWriter
 	statusCode    int
 	headerWritten bool
-	r             *http.Request
+	audit         *AuditState
 }
 
 func (rec *statusRecorder) WriteHeader(code int) {
@@ -87,21 +95,20 @@ func (rec *statusRecorder) WriteHeader(code int) {
 	rec.headerWritten = true
 
 	// Se houver cota registrada, atualiza os cabeçalhos X-Cota-*
-	if val := rec.r.Context().Value(cotaInfoKey); val != nil {
-		if cota, ok := val.(*CotaInfo); ok {
-			usado := cota.Usado
-			if cota.Cobravel && code >= 400 {
-				usado-- // Não foi cobrada devido a falha
-			}
-			limite := cota.Limite
-			restante := limite - usado
-			if restante < 0 {
-				restante = 0
-			}
-			rec.Header().Set("X-Cota-Limite", strconv.Itoa(limite))
-			rec.Header().Set("X-Cota-Usada", strconv.Itoa(usado))
-			rec.Header().Set("X-Cota-Restante", strconv.Itoa(restante))
+	if rec.audit != nil && rec.audit.CotaInfo != nil {
+		cota := rec.audit.CotaInfo
+		usado := cota.Usado
+		if cota.Cobravel && code >= 400 {
+			usado-- // Não foi cobrada devido a falha
 		}
+		limite := cota.Limite
+		restante := limite - usado
+		if restante < 0 {
+			restante = 0
+		}
+		rec.Header().Set("X-Cota-Limite", strconv.Itoa(limite))
+		rec.Header().Set("X-Cota-Usada", strconv.Itoa(usado))
+		rec.Header().Set("X-Cota-Restante", strconv.Itoa(restante))
 	}
 
 	rec.ResponseWriter.WriteHeader(code)
@@ -122,7 +129,9 @@ func MiddlewareEnvelope(db storage.BancoDados) func(http.Handler) http.Handler {
 			_, _ = rand.Read(b)
 			reqID := hex.EncodeToString(b)
 
+			audit := &AuditState{}
 			ctx := context.WithValue(r.Context(), requestIDKey, reqID)
+			ctx = context.WithValue(ctx, auditStateKey, audit)
 			r = r.WithContext(ctx)
 
 			// Cabeçalhos de Segurança Padrão
@@ -131,7 +140,7 @@ func MiddlewareEnvelope(db storage.BancoDados) func(http.Handler) http.Handler {
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("Referrer-Policy", "no-referrer")
 			w.Header().Set("Cache-Control", "no-store")
-			w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+			w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 			w.Header().Set("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
 			w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 
@@ -139,7 +148,7 @@ func MiddlewareEnvelope(db storage.BancoDados) func(http.Handler) http.Handler {
 			rec := &statusRecorder{
 				ResponseWriter: w,
 				statusCode:     http.StatusOK,
-				r:              r,
+				audit:          audit,
 			}
 
 			next.ServeHTTP(rec, r)
@@ -147,7 +156,9 @@ func MiddlewareEnvelope(db storage.BancoDados) func(http.Handler) http.Handler {
 			duracaoMs := int(time.Since(inicio).Milliseconds())
 			ip := ObterIP(r)
 			clienteNome := "-"
-			if id := ObterIdentidade(r); id != nil {
+			if audit.Identidade != nil {
+				clienteNome = audit.Identidade.NomeCliente
+			} else if id := ObterIdentidade(r); id != nil {
 				clienteNome = id.NomeCliente
 			}
 
@@ -155,12 +166,8 @@ func MiddlewareEnvelope(db storage.BancoDados) func(http.Handler) http.Handler {
 				reqID, clienteNome, ip, r.Method, r.URL.Path, rec.statusCode, duracaoMs)
 
 			// Finaliza uso no banco de dados se houve reserva
-			if db != nil {
-				if usoIDVal := r.Context().Value(usoIDKey); usoIDVal != nil {
-					if usoID, ok := usoIDVal.(int64); ok && usoID > 0 {
-						_ = db.FinalizarUso(context.Background(), usoID, rec.statusCode, duracaoMs, r.URL.Path)
-					}
-				}
+			if db != nil && audit.UsoID > 0 {
+				_ = db.FinalizarUso(context.Background(), audit.UsoID, rec.statusCode, duracaoMs, r.URL.Path)
 			}
 		})
 	}
@@ -193,6 +200,10 @@ func MiddlewareAuth(servicoAuth *auth.ServicoAuth, db storage.BancoDados, cobrav
 				return
 			}
 
+			if audit, ok := r.Context().Value(auditStateKey).(*AuditState); ok {
+				audit.Identidade = identidade
+			}
+
 			// 2. Limite de requisições por minuto
 			permitidoTaxa := servicoAuth.VerificarLimiteTaxa(identidade)
 			if !permitidoTaxa {
@@ -213,6 +224,10 @@ func MiddlewareAuth(servicoAuth *auth.ServicoAuth, db storage.BancoDados, cobrav
 					Limite:   *identidade.LimiteMensal,
 					Usado:    usado,
 					Cobravel: cobravel && permitido,
+				}
+				if audit, ok := r.Context().Value(auditStateKey).(*AuditState); ok {
+					audit.UsoID = usoID
+					audit.CotaInfo = cotaInfo
 				}
 				ctx = context.WithValue(ctx, cotaInfoKey, cotaInfo)
 
@@ -240,8 +255,9 @@ func MiddlewareAuth(servicoAuth *auth.ServicoAuth, db storage.BancoDados, cobrav
 func MiddlewareCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, X-API-Key, Content-Type, Accept, Origin, X-Requested-With")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID, X-Cota-Limite, X-Cota-Usada, X-Cota-Restante, Retry-After")
 		w.Header().Set("Access-Control-Max-Age", "86400")
 
 		if r.Method == http.MethodOptions {

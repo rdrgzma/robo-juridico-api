@@ -41,10 +41,17 @@ func (c *ClienteDataJud) ConsultarProcesso(ctx context.Context, numero string) (
 	}
 
 	payload := map[string]any{
-		"size": 1,
+		"size":             1,
+		"track_total_hits": false,
 		"query": map[string]any{
-			"match": map[string]any{
-				"numeroProcesso": procCNJ.Digitos,
+			"bool": map[string]any{
+				"filter": []map[string]any{
+					{
+						"term": map[string]any{
+							"numeroProcesso": procCNJ.Digitos,
+						},
+					},
+				},
 			},
 		},
 	}
@@ -59,10 +66,18 @@ func (c *ClienteDataJud) ConsultarProcesso(ctx context.Context, numero string) (
 	headers.Set("Authorization", fmt.Sprintf("ApiKey %s", c.apiKey))
 
 	var ultimaResp *network.RespostaHTTP
-	espera := 2 * time.Second
+	espera := 500 * time.Millisecond
+
+	timeoutTentativa := c.timeout
+	if timeoutTentativa > 15*time.Second {
+		timeoutTentativa = 15 * time.Second
+	}
 
 	for tentativa := 1; tentativa <= c.tentativas; tentativa++ {
-		ctxReq, cancel := context.WithTimeout(ctx, c.timeout)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		ctxReq, cancel := context.WithTimeout(ctx, timeoutTentativa)
 		resp, err := c.httpCliente.PostJSON(ctxReq, endpoint, payloadBytes, headers)
 		cancel()
 
@@ -143,12 +158,22 @@ func (c *ClienteDataJud) montarProcesso(body []byte, procCNJ *cnj.ProcessoCNJ) (
 	orgao := ""
 	if oMap, ok := src["orgaoJulgador"].(map[string]any); ok {
 		orgao, _ = oMap["nome"].(string)
+		orgao = CorrigirMojibake(strings.TrimSpace(orgao))
+	}
+
+	// Garante que cada movimentação do DataJud herde o órgão da capa quando não vier no movimento individual
+	for i := range movimentacoes {
+		if movimentacoes[i].Orgao == "" && orgao != "" {
+			movimentacoes[i].Orgao = orgao
+		}
 	}
 
 	comarca, _ := src["municipioInicioFormatado"].(string)
+	comarca = CorrigirMojibake(strings.TrimSpace(comarca))
 	if comarca == "" && orgao != "" {
-		m := regexComarca.FindStringSubmatch(orgao)
-		if len(m) > 1 {
+		if m := regexComarca.FindStringSubmatch(orgao); len(m) > 1 {
+			comarca = strings.TrimSpace(m[1])
+		} else if m := regexJurisdicaoCidades.FindStringSubmatch(orgao); len(m) > 1 {
 			comarca = strings.TrimSpace(m[1])
 		}
 	}
@@ -157,12 +182,14 @@ func (c *ClienteDataJud) montarProcesso(body []byte, procCNJ *cnj.ProcessoCNJ) (
 	classe := ""
 	if cMap, ok := src["classe"].(map[string]any); ok {
 		classe, _ = cMap["nome"].(string)
+		classe = CorrigirMojibake(strings.TrimSpace(classe))
 	}
 
 	assunto := ""
 	if aList, ok := src["assuntos"].([]any); ok && len(aList) > 0 {
 		if aMap, ok := aList[0].(map[string]any); ok {
 			assunto, _ = aMap["nome"].(string)
+			assunto = CorrigirMojibake(strings.TrimSpace(assunto))
 		}
 	}
 
@@ -172,13 +199,16 @@ func (c *ClienteDataJud) montarProcesso(body []byte, procCNJ *cnj.ProcessoCNJ) (
 		valorCausa = &v
 	}
 
-	// Data de ajuizamento
+	// Data de ajuizamento (suporta ISO e formato compacto YYYYMMDDHHmmss do DataJud, com fallback para 1ª movimentação)
 	var dataAjuizamento *time.Time
 	if dStr, ok := src["dataAjuizamento"].(string); ok && dStr != "" {
-		if t, err := time.Parse(time.RFC3339, dStr); err == nil {
-			utc := t.UTC()
-			dataAjuizamento = &utc
+		if t, okParse := ParseDataDataJud(dStr); okParse {
+			dataAjuizamento = &t
 		}
+	}
+	if dataAjuizamento == nil && len(movimentacoes) > 0 {
+		maisAntiga := movimentacoes[len(movimentacoes)-1].Data
+		dataAjuizamento = &maisAntiga
 	}
 
 	var dataUltimaMov string
@@ -194,6 +224,10 @@ func (c *ClienteDataJud) montarProcesso(body []byte, procCNJ *cnj.ProcessoCNJ) (
 	}
 
 	grau, _ := src["grau"].(string)
+
+	if advs == nil {
+		advs = []domain.Advogado{}
+	}
 
 	proc := &domain.Processo{
 		Numero:                         procCNJ.Formatado,
@@ -238,7 +272,7 @@ func (c *ClienteDataJud) montarProcesso(body []byte, procCNJ *cnj.ProcessoCNJ) (
 }
 
 func filtrarPolo(partes []domain.Parte, polo domain.Polo) []domain.Parte {
-	var filtradas []domain.Parte
+	filtradas := []domain.Parte{}
 	for _, p := range partes {
 		if p.Polo == polo {
 			filtradas = append(filtradas, p)

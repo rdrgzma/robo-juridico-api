@@ -85,7 +85,7 @@ func (c *ClienteComunica) buscar(ctx context.Context, params url.Values) ([]doma
 			select {
 			case <-ctx.Done():
 				return nil, 0, ctx.Err()
-			case <-time.After(2 * time.Second):
+			case <-time.After(500 * time.Millisecond):
 			}
 		}
 	}
@@ -97,6 +97,16 @@ func (c *ClienteComunica) PublicacoesDoProcesso(ctx context.Context, numero stri
 	digitos := regexSomenteDigitos.ReplaceAllString(numero, "")
 	if inicio.IsZero() {
 		inicio = time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)
+		// Extrai o ano diretamente do número CNJ (posições 9..13 dos 20 dígitos: NNNNNNNDDAAAAJTROOOO)
+		if len(digitos) == 20 {
+			var anoCNJ int
+			if _, err := fmt.Sscanf(digitos[9:13], "%d", &anoCNJ); err == nil {
+				anoAtual := time.Now().UTC().Year() + 1
+				if anoCNJ >= 2015 && anoCNJ <= anoAtual {
+					inicio = time.Date(anoCNJ, 1, 1, 0, 0, 0, 0, time.UTC)
+				}
+			}
+		}
 	}
 	if fim.IsZero() {
 		fim = time.Now().UTC()
@@ -109,16 +119,6 @@ func (c *ClienteComunica) PublicacoesDoProcesso(ctx context.Context, numero stri
 	params.Set("tamanhoPagina", fmt.Sprintf("%d", c.tamanhoPagina))
 
 	pubs, _, err := c.buscar(ctx, params)
-	if err == nil && len(pubs) > 0 {
-		return pubs, nil
-	}
-
-	// Segunda tentativa com número formatado caso digitos puros volte vazio
-	if len(pubs) == 0 && numero != digitos {
-		params.Set("numeroProcesso", numero)
-		pubs, _, err = c.buscar(ctx, params)
-	}
-
 	return pubs, err
 }
 
@@ -161,7 +161,10 @@ func (c *ClienteComunica) PublicacoesPorOAB(ctx context.Context, oabNumero, oabU
 }
 
 func (c *ClienteComunica) montarPublicacao(item map[string]any) domain.Publicacao {
-	id := fmt.Sprintf("%v", item["id"])
+	id := FormatarID(item["id"])
+	if id == "" && item["id"] != nil {
+		id = fmt.Sprintf("%v", item["id"])
+	}
 	dataDisp, _ := item["data_disponibilizacao"].(string)
 	if dataDisp == "" {
 		dataDisp, _ = item["datadisponibilizacao"].(string)
@@ -171,15 +174,17 @@ func (c *ClienteComunica) montarPublicacao(item map[string]any) domain.Publicaca
 	tipoCom, _ := item["tipoComunicacao"].(string)
 	tipoDoc, _ := item["tipoDocumento"].(string)
 	orgao, _ := item["nomeOrgao"].(string)
+	orgao = NormalizarCaixaAlta(orgao)
 	numProc, _ := item["numero_processo"].(string)
 	if numProc == "" {
 		numProc, _ = item["numeroprocessocommascara"].(string)
 	}
 	classe, _ := item["nomeClasse"].(string)
+	classe = NormalizarCaixaAlta(classe)
 	textoBruto, _ := item["texto"].(string)
 	link, _ := item["link"].(string)
 
-	var partes []domain.Parte
+	partes := []domain.Parte{}
 	if dests, ok := item["destinatarios"].([]any); ok {
 		for _, d := range dests {
 			if dmap, ok := d.(map[string]any); ok {
@@ -196,15 +201,16 @@ func (c *ClienteComunica) montarPublicacao(item map[string]any) domain.Publicaca
 				}
 				if strings.TrimSpace(nome) != "" {
 					partes = append(partes, domain.Parte{
-						Nome: strings.TrimSpace(nome),
-						Polo: polo,
+						Nome:      strings.TrimSpace(nome),
+						Polo:      polo,
+						Advogados: []domain.Advogado{},
 					})
 				}
 			}
 		}
 	}
 
-	var advs []domain.Advogado
+	advs := []domain.Advogado{}
 	if destAdvs, ok := item["destinatarioadvogados"].([]any); ok {
 		for _, entry := range destAdvs {
 			if emap, ok := entry.(map[string]any); ok {
@@ -226,6 +232,9 @@ func (c *ClienteComunica) montarPublicacao(item map[string]any) domain.Publicaca
 		}
 	}
 
+	textoLimpo := ExtrairTeor(textoBruto)
+	partes = ExtrairPartesDoTexto(textoLimpo, partes)
+
 	return domain.Publicacao{
 		ID:                   id,
 		DataDisponibilizacao: dataDisp,
@@ -235,7 +244,7 @@ func (c *ClienteComunica) montarPublicacao(item map[string]any) domain.Publicaca
 		Orgao:                orgao,
 		NumeroProcesso:       numProc,
 		Classe:               classe,
-		Texto:                ExtrairTeor(textoBruto),
+		Texto:                textoLimpo,
 		Link:                 link,
 		Partes:               partes,
 		Advogados:            advs,

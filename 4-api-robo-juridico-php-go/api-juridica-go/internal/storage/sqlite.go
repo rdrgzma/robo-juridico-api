@@ -91,17 +91,17 @@ func (s *BancoSQLite) ReservarCota(ctx context.Context, clienteID, chaveID, limi
 
 	if cobravel && usado >= limiteMensal {
 		_, _ = tx.ExecContext(ctx, `
-			INSERT INTO uso (cliente_id, chave_id, momento, metodo, caminho, status, ms, ip, cobravel, cobrado)
-			VALUES (?, ?, ?, ?, ?, 402, 0, ?, 1, 0)
-		`, clienteID, chaveID, agoraStr, metodo, caminho, ip)
+			INSERT INTO uso (cliente_id, chave_id, momento, metodo, rota, caminho, status, ms, ip, cobravel, cobrado)
+			VALUES (?, ?, ?, ?, ?, ?, 402, 0, ?, 1, 0)
+		`, clienteID, chaveID, agoraStr, metodo, caminho, caminho, ip)
 		_ = tx.Commit()
 		return false, 0, usado, nil
 	}
 
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO uso (cliente_id, chave_id, momento, metodo, caminho, ip, cobravel, cobrado)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, clienteID, chaveID, agoraStr, metodo, caminho, ip, cobravelInt, cobravelInt)
+		INSERT INTO uso (cliente_id, chave_id, momento, metodo, rota, caminho, ip, cobravel, cobrado)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, clienteID, chaveID, agoraStr, metodo, caminho, caminho, ip, cobravelInt, cobravelInt)
 	if err != nil {
 		return false, 0, 0, err
 	}

@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/fontes/datajud"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/network"
 	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/service"
+	"github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/storage"
 	transporthttp "github.com/rdrgzma/robo-juridico-api/api-juridica-go/internal/transport/http"
 )
 
@@ -469,3 +471,82 @@ func TestRotasCalculoJudicial(t *testing.T) {
 		t.Fatalf("Esperado 200 em POST /v1/webhooks/testar, obtido %d", wWhTest.Code)
 	}
 }
+
+type mockBancoComAuditoria struct {
+	reservado      bool
+	finalizado     bool
+	finalizadoID   int64
+	statusGravado  int
+	rotaGravada    string
+	msGravado      int
+}
+
+func (m *mockBancoComAuditoria) ValidarChave(ctx context.Context, hashChave string) (*storage.ChaveCliente, error) {
+	return &storage.ChaveCliente{
+		ChaveID:         10,
+		ClienteID:       1,
+		NomeCliente:     "Cliente Teste",
+		Ativo:           true,
+		Plano:           "pro",
+		LimiteMensal:    1000,
+		LimitePorMinuto: 60,
+	}, nil
+}
+
+func (m *mockBancoComAuditoria) ReservarCota(ctx context.Context, clienteID, chaveID, limiteMensal int, metodo, caminho, ip string, cobravel bool) (bool, int64, int, error) {
+	m.reservado = true
+	return true, 12345, 1, nil
+}
+
+func (m *mockBancoComAuditoria) FinalizarUso(ctx context.Context, usoID int64, status, ms int, rota string) error {
+	m.finalizado = true
+	m.finalizadoID = usoID
+	m.statusGravado = status
+	m.msGravado = ms
+	m.rotaGravada = rota
+	return nil
+}
+
+func (m *mockBancoComAuditoria) ObterConsumoMes(ctx context.Context, clienteID int) (int, error) {
+	return 1, nil
+}
+
+func (m *mockBancoComAuditoria) Fechar() error {
+	return nil
+}
+
+func TestFinalizarUsoGravadoCorretamente(t *testing.T) {
+	mockDB := &mockBancoComAuditoria{}
+	httpCli := network.NovoClienteHTTP(30, "teste")
+	dj := datajud.NovoClienteDataJud(httpCli, "key-fake", 5, 1)
+	com := comunica.NovoClienteComunica(httpCli, nil, 5, 10, 1)
+	c := cache.NovoCacheTTL()
+	orq := service.NovoOrquestrador(dj, com, c)
+
+	servicoAuth := auth.NovoServicoAuth(mockDB, nil, 60)
+	handlers := transporthttp.NovosHandlers(orq, nil, "1.0.0")
+	roteador := transporthttp.NovoRoteador(handlers, servicoAuth, mockDB)
+
+	req := httptest.NewRequest("GET", "/v1/processos/5053283-30.2024.8.13.0079/existe", nil)
+	req.Header.Set("X-API-Key", "qualquer-chave-cliente")
+	w := httptest.NewRecorder()
+
+	roteador.ServeHTTP(w, req)
+
+	if !mockDB.reservado {
+		t.Fatal("Esperava que ReservarCota tivesse sido chamado")
+	}
+	if !mockDB.finalizado {
+		t.Fatal("Esperava que FinalizarUso tivesse sido chamado")
+	}
+	if mockDB.finalizadoID != 12345 {
+		t.Errorf("Esperado usoID 12345, obtido %d", mockDB.finalizadoID)
+	}
+	if mockDB.statusGravado != w.Code {
+		t.Errorf("Esperado status %d gravado, obtido %d", w.Code, mockDB.statusGravado)
+	}
+	if mockDB.rotaGravada != "/v1/processos/5053283-30.2024.8.13.0079/existe" {
+		t.Errorf("Esperada rota '/v1/processos/5053283-30.2024.8.13.0079/existe', obtida '%s'", mockDB.rotaGravada)
+	}
+}
+

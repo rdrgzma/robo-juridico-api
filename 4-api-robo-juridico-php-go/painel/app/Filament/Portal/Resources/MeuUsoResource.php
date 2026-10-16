@@ -36,27 +36,33 @@ class MeuUsoResource extends Resource
                 Tables\Columns\TextColumn::make('momento_brasilia')
                     ->label('Data / Hora (Brasília)')
                     ->sortable(),
-                Tables\Columns\BadgeColumn::make('metodo')
+                Tables\Columns\TextColumn::make('metodo')
                     ->label('Método')
+                    ->badge()
                     ->colors([
                         'primary' => 'GET',
                         'success' => 'POST',
                     ]),
                 Tables\Columns\TextColumn::make('rota')
                     ->label('Endpoint')
+                    ->getStateUsing(fn ($record) => !empty($record->rota) ? $record->rota : (!empty($record->caminho) ? $record->caminho : '-'))
                     ->searchable()
-                    ->fontFamily('mono'),
-                Tables\Columns\BadgeColumn::make('status')
+                    ->fontFamily('mono')
+                    ->placeholder('-'),
+                Tables\Columns\TextColumn::make('status')
                     ->label('Status')
+                    ->badge()
                     ->colors([
                         'success' => fn ($state): bool => (int) $state >= 200 && (int) $state < 300,
                         'warning' => fn ($state): bool => (int) $state === 402,
                         'danger' => fn ($state): bool => (int) $state >= 400 && (int) $state !== 402,
-                    ]),
+                    ])
+                    ->placeholder('-'),
                 Tables\Columns\TextColumn::make('ms')
                     ->label('Latência')
-                    ->formatStateUsing(fn ($state) => "{$state} ms")
-                    ->sortable(),
+                    ->formatStateUsing(fn ($state) => ($state !== null && $state !== '') ? "{$state} ms" : '-')
+                    ->sortable()
+                    ->placeholder('-'),
                 Tables\Columns\IconColumn::make('cobravel')
                     ->label('Cobrável')
                     ->boolean(),

@@ -38,18 +38,23 @@ class UsoResource extends Resource
                     ->badge(),
                 Tables\Columns\TextColumn::make('rota')
                     ->label('Rota')
-                    ->searchable(),
-                Tables\Columns\BadgeColumn::make('status')
+                    ->getStateUsing(fn ($record) => !empty($record->rota) ? $record->rota : (!empty($record->caminho) ? $record->caminho : '-'))
+                    ->searchable()
+                    ->placeholder('-'),
+                Tables\Columns\TextColumn::make('status')
                     ->label('Status')
+                    ->badge()
                     ->colors([
                         'success' => fn ($state) => $state >= 200 && $state < 300,
                         'warning' => fn ($state) => $state >= 400 && $state < 500,
                         'danger' => fn ($state) => $state >= 500,
-                    ]),
+                    ])
+                    ->placeholder('-'),
                 Tables\Columns\TextColumn::make('ms')
                     ->label('Latência')
-                    ->suffix(' ms')
-                    ->sortable(),
+                    ->formatStateUsing(fn ($state) => ($state !== null && $state !== '') ? "{$state} ms" : '-')
+                    ->sortable()
+                    ->placeholder('-'),
                 Tables\Columns\IconColumn::make('cobravel')
                     ->label('Faturável')
                     ->boolean(),
