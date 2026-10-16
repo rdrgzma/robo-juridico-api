@@ -10,10 +10,11 @@ O **Robô Jurídico** resolve a fragmentação dos dados jurídicos no Brasil at
 * **DataJud (Elasticsearch):** Extrai capa, classe, assunto, comarca, órgão julgador e a árvore profunda de movimentações internas do processo.
 * **DJEN / Comunica (Diário da Justiça Eletrônico Nacional):** Extrai o teor completo dos atos e despachos publicados, partes envolvidas com seus polos e advogados vinculados (com OAB e UF).
 
-O projeto é disponibilizado em três modalidades prontas para uso:
+O projeto é disponibilizado em quatro modalidades prontas para uso:
 1. **Biblioteca Python** (`from consulta_processos import consultar_processo, buscar_por_oab`)
 2. **Interface Web Local** (`consulta-processos web` em `http://localhost:8765`, sem dependências externas)
 3. **API REST FastAPI com Painel SaaS** (`consulta-processos api` em `http://127.0.0.1:8000`), incluindo documentação interativa Swagger (`/docs`), gestão de clientes, chaves (`rj_live_...`), limites de requisições por minuto e controle atômico de cotas mensais (`/admin`).
+4. **Aplicativo Desktop On-Premise Windows & Linux** (`5-app-juridico-desktop/`): Executável nativo autocontido com SQLite local, motor de cálculo pericial (DrCalc / Lei 14.905 / Art. 354 CC / Revisional / Prazos), consulta CNJ e licenciamento criptográfico ECDSA por Hardware ID.
 
 ---
 
@@ -28,6 +29,7 @@ Toda a documentação técnica, especificação de requisitos e guias operaciona
 | 🏗️ [**03 - Especificação Técnica e Arquitetura**](docs/03-DOCUMENTACAO-TECNICA-E-ARQUITETURA.md) | Diagramas C4/Mermaid, fluxo concorrente, cache anti-thundering herd, banco SQLite WAL e segurança. |
 | 🔌 [**04 - Manual de Integração e API Reference**](docs/04-MANUAL-DE-INTEGRACAO-E-API-REFERENCE.md) | Catálogo de endpoints, dicionário de dados, cabeçalhos de saldo, tratamento de erros e snippets (Python, Node.js, cURL). |
 | 🛡️ [**05 - Guia de Operações, Segurança e LGPD**](docs/05-GUIA-DE-OPERACAO-SEGURANCA-E-LGPD.md) | Deploy em produção (Docker, Nginx com TLS), proxies residenciais brasileiros, backup quente do SQLite e conformidade LGPD. |
+| 💻 [**08 - Guia do Sistema Desktop On-Premise**](docs/08-GUIA-SISTEMA-JURIDICO-DESKTOP-ON-PREMISE.md) | Arquitetura do executável desktop para Windows/Linux, licenciamento criptográfico por Hardware ID e motor pericial offline. |
 | 🧭 [**Índice Geral de Documentação**](docs/README.md) | Mapa de navegação unificado da documentação. |
 
 ---
