@@ -1,10 +1,21 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Robô Jurídico Desktop · Sistema de Consulta & Cálculos</title>
   <link rel="stylesheet" href="/style.css">
+  <script>
+    // Inicialização imediata do tema para evitar flash visual
+    (function() {
+      const salvo = localStorage.getItem('robo_juridico_theme');
+      if (salvo === 'light' || (!salvo && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
 </head>
 <body>
 
@@ -46,8 +57,12 @@
     </nav>
 
     <div class="sidebar-footer">
+      <button class="theme-switch-btn" onclick="alternarTema()" title="Alternar entre tema Claro e Escuro">
+        <span class="theme-switch-icon"><span id="theme-icon">🌙</span> <span id="theme-label">Tema Escuro</span></span>
+        <span style="font-size: 10px; opacity: 0.7;">Trocar</span>
+      </button>
       <div id="badge-licenca-sidebar" class="badge badge-success">SISTEMA ATIVO</div>
-      <div style="font-size: 10px; color: #64748b;">ID: <span id="lbl-hwid-curto">Carregando...</span></div>
+      <div style="font-size: 10px; color: var(--text-muted);">ID: <span id="lbl-hwid-curto">Carregando...</span></div>
     </div>
   </aside>
 
@@ -61,24 +76,27 @@
           <h2>Painel de Controle</h2>
           <p>Visão geral dos recursos jurídicos locais e status do ambiente.</p>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="carregarInfoSistema()">🔄 Atualizar Status</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary btn-sm" onclick="alternarTema()">🌓 Alternar Tema</button>
+          <button class="btn btn-secondary btn-sm" onclick="carregarInfoSistema()">🔄 Atualizar Status</button>
+        </div>
       </header>
 
       <div class="grid-cards">
         <div class="card">
           <div class="card-title">Índices Econômicos</div>
           <div class="card-value" id="dash-total-indices">27</div>
-          <p style="font-size: 12px; color: #94a3b8; margin-top: 6px;">TJSP, SELIC, IPCA, INPC, IGP-M</p>
+          <p class="text-muted" style="font-size: 12px; margin-top: 6px;">TJSP, SELIC, IPCA, INPC, IGP-M</p>
         </div>
         <div class="card">
           <div class="card-title">Hardware Fingerprint</div>
           <div class="card-value" style="font-size: 15px; font-family: monospace;" id="dash-hwid">---</div>
-          <p style="font-size: 12px; color: #94a3b8; margin-top: 6px;">Identificador único da máquina</p>
+          <p class="text-muted" style="font-size: 12px; margin-top: 6px;">Identificador único da máquina</p>
         </div>
         <div class="card">
           <div class="card-title">Status da Licença</div>
           <div class="card-value" style="font-size: 18px;" id="dash-lic-status">Ativa (Pericial Pro)</div>
-          <p style="font-size: 12px; color: #94a3b8; margin-top: 6px;" id="dash-lic-venc">Validade Permanente</p>
+          <p class="text-muted" style="font-size: 12px; margin-top: 6px;" id="dash-lic-venc">Validade Permanente</p>
         </div>
       </div>
 
@@ -125,23 +143,23 @@
       <div id="resultado-consulta-box" style="display: none;" class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
           <div>
-            <h3 id="res-proc-titulo" style="font-size: 18px; color: #38bdf8;">Processo ---</h3>
-            <p id="res-proc-tribunal" style="font-size: 13px; color: #94a3b8;">Tribunal: ---</p>
+            <h3 id="res-proc-titulo" class="text-accent" style="font-size: 18px;">Processo ---</h3>
+            <p id="res-proc-tribunal" class="text-muted" style="font-size: 13px;">Tribunal: ---</p>
           </div>
           <button class="btn btn-secondary btn-sm" onclick="salvarConsultaHistorico()">💾 Salvar no Histórico</button>
         </div>
 
         <div class="grid-cards" style="margin-top: 16px;">
-          <div style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px;">
-            <strong style="font-size: 12px; color: #94a3b8;">Classe Processual</strong>
+          <div class="card" style="background: var(--bg-subtle); padding: 12px; border-radius: 6px;">
+            <strong class="text-muted" style="font-size: 12px;">Classe Processual</strong>
             <div id="res-proc-classe" style="font-size: 14px; font-weight: 600; margin-top: 4px;">---</div>
           </div>
-          <div style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px;">
-            <strong style="font-size: 12px; color: #94a3b8;">Assunto Principal</strong>
+          <div class="card" style="background: var(--bg-subtle); padding: 12px; border-radius: 6px;">
+            <strong class="text-muted" style="font-size: 12px;">Assunto Principal</strong>
             <div id="res-proc-assunto" style="font-size: 14px; font-weight: 600; margin-top: 4px;">---</div>
           </div>
-          <div style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px;">
-            <strong style="font-size: 12px; color: #94a3b8;">Órgão Julgador</strong>
+          <div class="card" style="background: var(--bg-subtle); padding: 12px; border-radius: 6px;">
+            <strong class="text-muted" style="font-size: 12px;">Órgão Julgador</strong>
             <div id="res-proc-orgao" style="font-size: 14px; font-weight: 600; margin-top: 4px;">---</div>
           </div>
         </div>
@@ -163,7 +181,7 @@
       </header>
 
       <div class="card">
-        <h3 style="font-size: 15px; margin-bottom: 12px; color: #38bdf8;">1. Parâmetros Gerais da Liquidação</h3>
+        <h3 class="text-accent" style="font-size: 15px; margin-bottom: 12px;">1. Parâmetros Gerais da Liquidação</h3>
         <div class="form-row">
           <div class="form-group">
             <label for="calc-data-ad-quem">Data de Atualização (Ad Quem)</label>
@@ -213,7 +231,7 @@
 
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h3 style="font-size: 15px; color: #38bdf8;">2. Parcelas, Custas e Abatimentos</h3>
+          <h3 class="text-accent" style="font-size: 15px;">2. Parcelas, Custas e Abatimentos</h3>
           <button class="btn btn-secondary btn-sm" onclick="adicionarLinhaParcela()">➕ Adicionar Parcela</button>
         </div>
 
@@ -252,7 +270,7 @@
       <!-- Relatório de Resultado -->
       <div id="resultado-liquidacao-box" style="display: none;" class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
-          <h3 style="font-size: 18px; color: #10b981;">Memória de Cálculo Finalizada</h3>
+          <h3 style="font-size: 18px; color: var(--success);">Memória de Cálculo Finalizada</h3>
           <div style="display: flex; gap: 8px;">
             <button class="btn btn-secondary btn-sm" onclick="exportarCSVMemoria()">📥 Exportar Excel (CSV)</button>
             <button class="btn btn-primary btn-sm" onclick="window.print()">🖨️ Imprimir Laudo Pericial</button>
@@ -260,21 +278,21 @@
         </div>
 
         <div class="grid-cards" style="margin-top: 16px;">
-          <div class="card" style="background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3);">
+          <div class="card" style="background: var(--card-highlight-blue); border-color: rgba(59, 130, 246, 0.3);">
             <div class="card-title">Valor Original Total</div>
             <div class="card-value" id="res-total-original">R$ 0,00</div>
           </div>
-          <div class="card" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
+          <div class="card" style="background: var(--card-highlight-green); border-color: rgba(16, 185, 129, 0.3);">
             <div class="card-title">Principal Corrigido</div>
             <div class="card-value" id="res-total-corrigido">R$ 0,00</div>
           </div>
-          <div class="card" style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3);">
+          <div class="card" style="background: var(--card-highlight-yellow); border-color: rgba(245, 158, 11, 0.3);">
             <div class="card-title">Juros Moratórios</div>
             <div class="card-value" id="res-total-juros">R$ 0,00</div>
           </div>
-          <div class="card" style="background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.3);">
+          <div class="card" style="background: var(--card-highlight-purple); border-color: rgba(168, 85, 247, 0.3);">
             <div class="card-title">TOTAL GERAL DEVIDO</div>
-            <div class="card-value" style="color: #38bdf8;" id="res-total-geral">R$ 0,00</div>
+            <div class="card-value text-accent" id="res-total-geral">R$ 0,00</div>
           </div>
         </div>
 
@@ -348,7 +366,7 @@
       </div>
 
       <div id="resultado-revisional-box" style="display: none;" class="card">
-        <h3 style="font-size: 16px; color: #10b981; margin-bottom: 14px;">Quadro Comparativo Revisional</h3>
+        <h3 style="font-size: 16px; color: var(--success); margin-bottom: 14px;">Quadro Comparativo Revisional</h3>
         <div class="grid-cards">
           <div class="card">
             <div class="card-title">Parcela Contratada</div>
@@ -356,15 +374,15 @@
           </div>
           <div class="card">
             <div class="card-title">Parcela Recalculada</div>
-            <div class="card-value" style="color: #38bdf8;" id="rev-pmt-revisada">R$ 0,00</div>
+            <div class="card-value text-accent" id="rev-pmt-revisada">R$ 0,00</div>
           </div>
           <div class="card">
             <div class="card-title">Economia por Parcela</div>
-            <div class="card-value" style="color: #10b981;" id="rev-eco-parcela">R$ 0,00</div>
+            <div class="card-value" style="color: var(--success);" id="rev-eco-parcela">R$ 0,00</div>
           </div>
           <div class="card">
             <div class="card-title">Indébito Total a Restituir</div>
-            <div class="card-value" style="color: #f59e0b;" id="rev-total-restituir">R$ 0,00</div>
+            <div class="card-value" style="color: var(--warning);" id="rev-total-restituir">R$ 0,00</div>
           </div>
         </div>
       </div>
@@ -413,15 +431,15 @@
 
       <div id="resultado-prazo-box" style="display: none;" class="card">
         <div class="grid-cards">
-          <div class="card" style="border-left: 4px solid #38bdf8;">
+          <div class="card" style="border-left: 4px solid var(--accent);">
             <div class="card-title">Início da Contagem</div>
             <div class="card-value" style="font-size: 20px;" id="prazo-inicio-contagem">--/--/----</div>
-            <p style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Art. 224, § 2º CPC</p>
+            <p class="text-muted" style="font-size: 11px; margin-top: 4px;">Art. 224, § 2º CPC</p>
           </div>
-          <div class="card" style="border-left: 4px solid #10b981;">
+          <div class="card" style="border-left: 4px solid var(--success);">
             <div class="card-title">Vencimento Fatal</div>
-            <div class="card-value" style="font-size: 24px; color: #34d399;" id="prazo-vencimento-fatal">--/--/----</div>
-            <p style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Último dia para protocolo</p>
+            <div class="card-value" style="font-size: 24px; color: var(--success);" id="prazo-vencimento-fatal">--/--/----</div>
+            <p class="text-muted" style="font-size: 11px; margin-top: 4px;">Último dia para protocolo</p>
           </div>
         </div>
 
@@ -510,7 +528,7 @@
 
       <div class="card">
         <h3 style="font-size: 15px; margin-bottom: 8px;">Seu Hardware Fingerprint (Machine ID)</h3>
-        <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Forneça este identificador único para emissão da sua licença:</p>
+        <p class="text-muted" style="font-size: 13px; margin-bottom: 12px;">Forneça este identificador único para emissão da sua licença:</p>
         <div style="display: flex; gap: 10px; align-items: center;">
           <input type="text" id="txt-hwid-display" readonly style="font-family: monospace; font-size: 16px; font-weight: 700; width: 340px;">
           <button class="btn btn-secondary btn-sm" onclick="copiarHWID()">📋 Copiar ID</button>
@@ -519,7 +537,7 @@
 
       <div class="card" style="margin-top: 16px;">
         <h3 style="font-size: 15px; margin-bottom: 8px;">Ativar Nova Chave de Licença</h3>
-        <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Cole o token/chave assinada digitalmente recebida por e-mail ou no painel:</p>
+        <p class="text-muted" style="font-size: 13px; margin-bottom: 12px;">Cole o token/chave assinada digitalmente recebida por e-mail ou no painel:</p>
         <textarea id="txt-token-licenca" rows="4" placeholder="Cole aqui seu token de licença assinado..."></textarea>
         <div style="margin-top: 12px; display: flex; justify-content: flex-end;">
           <button class="btn btn-primary" onclick="ativarLicencaToken()">🔐 Ativar Licença</button>

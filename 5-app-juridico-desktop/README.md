@@ -89,6 +89,10 @@ chmod +x iniciar-desktop.sh
    * Exibe o Machine ID para o cliente enviar ao suporte.
    * Campo para colar e ativar a licença assinada criptograficamente via ECDSA.
 
+9. **Tema Claro e Escuro (Light & Dark Mode):**
+   * Suporte nativo a alternância com 1 clique (botão na barra lateral e cabeçalho).
+   * Detecção automática da preferência do sistema operacional e persistência da escolha do usuário no terminal.
+
 ---
 
 ## 🔐 Como Funciona o Licenciamento

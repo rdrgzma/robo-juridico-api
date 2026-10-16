@@ -6,6 +6,41 @@ let estadoApp = {
   ultimaConsulta: null,
 };
 
+// ==========================================================================
+// Gerenciamento de Tema (Claro / Escuro)
+// ==========================================================================
+function obterTemaAtual() {
+  return document.documentElement.getAttribute('data-theme') || 'dark';
+}
+
+function aplicarTema(tema) {
+  document.documentElement.setAttribute('data-theme', tema);
+  try {
+    localStorage.setItem('robo_juridico_theme', tema);
+  } catch (e) {}
+  atualizarBotaoTema(tema);
+}
+
+function alternarTema() {
+  const atual = obterTemaAtual();
+  const novoTema = atual === 'dark' ? 'light' : 'dark';
+  aplicarTema(novoTema);
+}
+
+function atualizarBotaoTema(tema) {
+  const icon = document.getElementById('theme-icon');
+  const label = document.getElementById('theme-label');
+  if (icon && label) {
+    if (tema === 'light') {
+      icon.innerText = '☀️';
+      label.innerText = 'Tema Claro';
+    } else {
+      icon.innerText = '🌙';
+      label.innerText = 'Tema Escuro';
+    }
+  }
+}
+
 // Navegação entre abas
 function navegarPara(secaoID) {
   document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
@@ -87,10 +122,10 @@ async function formatarEValidarCNJ(valor) {
       const data = await res.json();
       badge.style.display = 'block';
       if (data.valido) {
-        badge.style.color = '#34d399';
+        badge.style.color = 'var(--success)';
         badge.innerText = '✔ Módulo 97 Válido (' + (data.tribunal || 'Tribunal Identificado') + ')';
       } else {
-        badge.style.color = '#f87171';
+        badge.style.color = 'var(--danger)';
         badge.innerText = '✖ Dígito verificador CNJ inválido';
       }
     } catch (e) {
@@ -143,14 +178,14 @@ async function executarConsultaProcesso() {
 
     const movs = p.movimentacoes || [];
     if (movs.length === 0) {
-      movBox.innerHTML = '<div style="color: #94a3b8; font-size: 13px;">Sem movimentações registradas recentemente.</div>';
+      movBox.innerHTML = '<div class="text-muted" style="font-size: 13px;">Sem movimentações registradas recentemente.</div>';
     } else {
       movs.slice(0, 15).forEach(m => {
         const item = document.createElement('div');
-        item.style = "padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 4px; border-left: 3px solid #3b82f6;";
+        item.style = "padding: 8px 12px; background: var(--bg-subtle); border-radius: 4px; border-left: 3px solid var(--accent); border: 1px solid var(--border);";
         item.innerHTML = `
-          <div style="font-size: 11px; color: #94a3b8;">${m.data || 'Data N/D'}</div>
-          <div style="font-size: 13px; font-weight: 600; color: #f8fafc; margin-top: 2px;">${m.nome || m.descricao || 'Movimentação'}</div>
+          <div class="text-muted" style="font-size: 11px;">${m.data || 'Data N/D'}</div>
+          <div style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-top: 2px;">${m.nome || m.descricao || 'Movimentação'}</div>
         `;
         movBox.appendChild(item);
       });
@@ -276,7 +311,7 @@ function exibirResultadoLiquidacao(data) {
       <td>${parseFloat(it.fator_correcao).toFixed(6)}</td>
       <td>${fmt(it.valor_corrigido)}</td>
       <td>${fmt(it.valor_juros_mora)}</td>
-      <td><strong style="color: #38bdf8;">${fmt(it.total_item)}</strong></td>
+      <td><strong class="text-accent">${fmt(it.total_item)}</strong></td>
     `;
     tbody.appendChild(tr);
   });
@@ -415,7 +450,7 @@ async function carregarIndices() {
     indices.forEach(idx => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong style="color: #38bdf8;">${idx.codigo}</strong></td>
+        <td><strong class="text-accent">${idx.codigo}</strong></td>
         <td>${idx.nome}</td>
         <td>${idx.fonte}</td>
         <td>${idx.periodicidade}</td>
@@ -448,7 +483,7 @@ async function carregarHistoricoLocal() {
     tbody.innerHTML = '';
 
     if (lista.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #94a3b8;">Nenhum cálculo salvo ainda.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Nenhum cálculo salvo ainda.</td></tr>';
       return;
     }
 
@@ -511,5 +546,8 @@ async function ativarLicencaToken() {
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
+  const temaSalvo = localStorage.getItem('robo_juridico_theme') || 
+    (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  aplicarTema(temaSalvo);
   carregarInfoSistema();
 });
