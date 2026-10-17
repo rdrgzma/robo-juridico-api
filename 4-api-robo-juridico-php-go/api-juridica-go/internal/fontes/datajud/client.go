@@ -229,6 +229,13 @@ func (c *ClienteDataJud) montarProcesso(body []byte, procCNJ *cnj.ProcessoCNJ) (
 		advs = []domain.Advogado{}
 	}
 
+	linkTribunal := cnj.GerarLinkTribunal(procCNJ.Formatado, tribunalFinal, grau, procCNJ.OrigemCodigo)
+	for i := range movimentacoes {
+		if movimentacoes[i].Link == "" {
+			movimentacoes[i].Link = linkTribunal
+		}
+	}
+
 	proc := &domain.Processo{
 		Numero:                         procCNJ.Formatado,
 		NumeroDigitos:                  procCNJ.Digitos,
@@ -239,6 +246,7 @@ func (c *ClienteDataJud) montarProcesso(body []byte, procCNJ *cnj.ProcessoCNJ) (
 		Assunto:                        assunto,
 		OrgaoJulgador:                  orgao,
 		Comarca:                        comarca,
+		Link:                           linkTribunal,
 		ValorCausa:                     valorCausa,
 		ValorCausaFormatado:            FormatarDinheiroBR(valorCausa),
 		DataAjuizamento:                dataAjuizamento,

@@ -403,6 +403,12 @@ class CalculoJudicialService
                     $classeProcessual = $proc['classe'];
                     $descricaoSugerida = "{$proc['classe']} ({$tribunal})";
                 }
+                if (!empty($proc['link'])) {
+                    $linkTribunal = $proc['link'];
+                }
+                if (!empty($proc['link_peca'])) {
+                    $linkPeca = $proc['link_peca'];
+                }
             }
         } catch (\Throwable $e) {
             // Silencioso: mantém os dados decodificados offline do CNJ
@@ -419,6 +425,8 @@ class CalculoJudicialService
             'valor_sugerido' => $valorSugerido,
             'descricao_sugerida' => $descricaoSugerida,
             'classe' => $classeProcessual,
+            'link' => $linkTribunal ?? null,
+            'link_peca' => $linkPeca ?? null,
         ];
     }
 

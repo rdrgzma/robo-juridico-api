@@ -519,7 +519,10 @@
                         if (info.data_sugerida) linhas[0].querySelector('.campo-data').value = info.data_sugerida;
                         if (info.valor_sugerido) linhas[0].querySelector('.campo-valor').value = info.valor_sugerido;
                     }
-                    statusEl.textContent = `Tribunal: ${info.tribunal} (${info.segmento}) • Indexador: ${info.indexador_sugerido}`;
+                    const digitosCNJ = (info.numero_formatado || num).replace(/\D/g, '');
+                    const urlTrib = info.link || `https://comunica.pje.jus.br/consulta?numeroProcesso=${digitosCNJ}`;
+                    const linkPecaHtml = info.link_peca ? ` • <a href="${info.link_peca}" target="_blank" rel="noopener noreferrer" class="underline text-purple-600 hover:text-purple-800 font-bold">📄 Abrir Peça Recente ↗</a>` : '';
+                    statusEl.innerHTML = `Tribunal: ${info.tribunal} (${info.segmento}) • Indexador: ${info.indexador_sugerido} • <a href="${urlTrib}" target="_blank" rel="noopener noreferrer" class="underline text-indigo-600 hover:text-indigo-800 font-bold">🌐 Abrir no Tribunal ↗</a>${linkPecaHtml}`;
                     statusEl.className = 'text-[10px] text-emerald-600 font-semibold mt-1 block';
                 } else {
                     statusEl.textContent = info.mensagem || 'Número CNJ inválido.';

@@ -97,7 +97,78 @@ async function carregarInfoSistema() {
 }
 
 // 2. Validação e Máscara Dinâmica de CNJ
+function limparResultadosConsulta() {
+  const box = document.getElementById('resultado-consulta-box');
+  if (box) {
+    box.style.display = 'none';
+  }
+  const loadingBox = document.getElementById('consulta-loading-box');
+  if (loadingBox) {
+    loadingBox.style.display = 'none';
+  }
+  estadoApp.ultimaConsulta = null;
+  estadoApp.todasMovimentacoes = [];
+  estadoApp.mostrarTodasMovs = false;
+
+  const titulo = document.getElementById('res-proc-titulo');
+  if (titulo) titulo.innerText = 'Processo ---';
+  const trib = document.getElementById('res-proc-tribunal');
+  if (trib) trib.innerText = 'Tribunal: ---';
+  const badgeGrau = document.getElementById('badge-proc-grau');
+  if (badgeGrau) badgeGrau.style.display = 'none';
+  const btnTrib = document.getElementById('btn-proc-link-tribunal');
+  if (btnTrib) {
+    btnTrib.style.display = 'none';
+    btnTrib.href = '#';
+  }
+  const btnPeca = document.getElementById('btn-proc-link-peca');
+  if (btnPeca) {
+    btnPeca.style.display = 'none';
+    btnPeca.href = '#';
+  }
+
+  // Limpa barra de fontes e avisos
+  const fontesBar = document.getElementById('res-proc-fontes-bar');
+  if (fontesBar) fontesBar.style.display = 'none';
+  const fontesBadges = document.getElementById('res-proc-fontes-badges');
+  if (fontesBadges) fontesBadges.innerHTML = '';
+  const avisosLista = document.getElementById('res-proc-avisos-lista');
+  if (avisosLista) {
+    avisosLista.style.display = 'none';
+    avisosLista.innerHTML = '';
+  }
+
+  // Limpa metadados e polos do processo anterior
+  const elClasse = document.getElementById('res-proc-classe');
+  if (elClasse) elClasse.innerText = '---';
+  const elAssunto = document.getElementById('res-proc-assunto');
+  if (elAssunto) elAssunto.innerText = '---';
+  const elOrgao = document.getElementById('res-proc-orgao');
+  if (elOrgao) elOrgao.innerText = '---';
+  const elDatas = document.getElementById('res-proc-datas');
+  if (elDatas) elDatas.innerText = '---';
+  const elPoloAtivo = document.getElementById('res-proc-polo-ativo');
+  if (elPoloAtivo) elPoloAtivo.innerText = '---';
+  const elPoloPassivo = document.getElementById('res-proc-polo-passivo');
+  if (elPoloPassivo) elPoloPassivo.innerText = '---';
+  const elAdv = document.getElementById('res-proc-advogados');
+  if (elAdv) elAdv.innerText = '---';
+  const badgeTotalMovs = document.getElementById('badge-total-movs');
+  if (badgeTotalMovs) badgeTotalMovs.innerText = '0 registros';
+  const btnToggle = document.getElementById('btn-toggle-todas-movs');
+  if (btnToggle) btnToggle.style.display = 'none';
+
+  const movBox = document.getElementById('res-proc-movimentacoes');
+  if (movBox) movBox.innerHTML = '';
+}
+
 async function formatarEValidarCNJ(valor) {
+  // Limpa os resultados da consulta anterior sempre que o número for digitado ou alterado
+  const box = document.getElementById('resultado-consulta-box');
+  if (box && box.style.display !== 'none') {
+    limparResultadosConsulta();
+  }
+
   let digitos = valor.replace(/\D/g, '');
   if (digitos.length > 20) digitos = digitos.substring(0, 20);
 
@@ -136,6 +207,22 @@ async function formatarEValidarCNJ(valor) {
   }
 }
 
+// Utilitário de formatação de datas
+function formatarDataHora(str) {
+  if (!str) return 'N/D';
+  if (str.length === 10 && str.includes('-')) {
+    const parts = str.split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('pt-BR');
+    }
+  } catch (e) {}
+  return str;
+}
+
 // 3. Consulta de Processo (DataJud + DJEN)
 async function executarConsultaProcesso() {
   const cnj = document.getElementById('txt-numero-cnj').value.trim();
@@ -146,9 +233,34 @@ async function executarConsultaProcesso() {
     return;
   }
 
+  // 1. Limpa completamente os dados da consulta anterior
+  limparResultadosConsulta();
+
+  const btn = document.getElementById('btn-exec-consulta-processo');
+  const btnOriginalHTML = btn ? btn.innerHTML : 'Buscar Processo';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Consultando...';
+  }
+
+  // 2. Exibe o card elegante de consulta às fontes oficiais
+  const loadingBox = document.getElementById('consulta-loading-box');
+  const loadingCNJ = document.getElementById('consulta-loading-cnj');
+  const pillDataJud = document.getElementById('loading-pill-datajud');
+  const pillDJEN = document.getElementById('loading-pill-djen');
+
+  if (loadingCNJ) loadingCNJ.innerText = cnj;
+  if (pillDataJud) {
+    pillDataJud.style.display = modo === 'rapido' ? 'none' : 'inline-flex';
+  }
+  if (pillDJEN) {
+    pillDJEN.style.display = 'inline-flex';
+  }
+  if (loadingBox) {
+    loadingBox.style.display = 'flex';
+  }
+
   const box = document.getElementById('resultado-consulta-box');
-  box.style.display = 'block';
-  document.getElementById('res-proc-titulo').innerText = 'Consultando fontes oficiais...';
 
   try {
     const res = await fetch('/api/processo/consultar', {
@@ -158,42 +270,403 @@ async function executarConsultaProcesso() {
     });
     const data = await res.json();
 
+    if (loadingBox) loadingBox.style.display = 'none';
+    if (box) box.style.display = 'block';
+
     if (!data.sucesso || !data.processo) {
       document.getElementById('res-proc-titulo').innerText = 'Nenhum registro encontrado nas fontes públicas';
-      document.getElementById('res-proc-tribunal').innerText = data.erro || 'Verifique se o processo está em segredo de justiça.';
+      document.getElementById('res-proc-tribunal').innerText = data.erro || 'Verifique se o processo está em segredo de justiça ou se o número está correto.';
       return;
     }
 
     const p = data.processo;
+    const avisos = data.avisos || [];
     estadoApp.ultimaConsulta = p;
+    estadoApp.todasMovimentacoes = p.movimentacoes || [];
+    estadoApp.mostrarTodasMovs = false;
 
-    document.getElementById('res-proc-titulo').innerText = p.numero || cnj;
-    document.getElementById('res-proc-tribunal').innerText = 'Tribunal: ' + (p.tribunal || 'DataJud/DJEN') + ' · Atualizado em: ' + new Date().toLocaleTimeString('pt-BR');
-    document.getElementById('res-proc-classe').innerText = p.classe || 'Não especificada';
-    document.getElementById('res-proc-assunto').innerText = p.assunto || 'Cível Geral';
-    document.getElementById('res-proc-orgao').innerText = p.orgao_julgador || 'Vara Cível';
+    // Cabeçalho e Tribunal
+    document.getElementById('res-proc-titulo').innerText = p.titulo || p.numero || cnj;
+    document.getElementById('res-proc-tribunal').innerText = 'Tribunal: ' + (p.tribunal || 'DataJud/DJEN') + (p.segmento ? ' · ' + p.segmento : '') + ' · Consultado em: ' + new Date().toLocaleTimeString('pt-BR');
 
-    const movBox = document.getElementById('res-proc-movimentacoes');
-    movBox.innerHTML = '';
+    // Renderiza Aviso de Fontes Consultadas e Alertas do Orquestrador
+    const fontesBar = document.getElementById('res-proc-fontes-bar');
+    const fontesBadges = document.getElementById('res-proc-fontes-badges');
+    const avisosLista = document.getElementById('res-proc-avisos-lista');
 
-    const movs = p.movimentacoes || [];
-    if (movs.length === 0) {
-      movBox.innerHTML = '<div class="text-muted" style="font-size: 13px;">Sem movimentações registradas recentemente.</div>';
-    } else {
-      movs.slice(0, 15).forEach(m => {
-        const item = document.createElement('div');
-        item.style = "padding: 8px 12px; background: var(--bg-subtle); border-radius: 4px; border-left: 3px solid var(--accent); border: 1px solid var(--border);";
-        item.innerHTML = `
-          <div class="text-muted" style="font-size: 11px;">${m.data || 'Data N/D'}</div>
-          <div style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-top: 2px;">${m.nome || m.descricao || 'Movimentação'}</div>
-        `;
-        movBox.appendChild(item);
-      });
+    if (fontesBar && fontesBadges) {
+      const fontesProc = Array.isArray(p.fontes) && p.fontes.length > 0 ? p.fontes : [];
+      fontesBadges.innerHTML = '';
+
+      if (fontesProc.includes('datajud')) {
+        const qtdMovDJ = (p.movimentacoes || []).filter(m => m.fonte === 'datajud').length;
+        const spanDJ = document.createElement('span');
+        spanDJ.className = 'fonte-badge fonte-badge-datajud';
+        spanDJ.innerHTML = `🏛️ DataJud / CNJ (${qtdMovDJ} andamento${qtdMovDJ === 1 ? '' : 's'})`;
+        fontesBadges.appendChild(spanDJ);
+      }
+
+      if (fontesProc.includes('comunica')) {
+        const qtdPubs = (p.publicacoes || []).length || (p.movimentacoes || []).filter(m => m.fonte === 'comunica').length;
+        const spanCom = document.createElement('span');
+        spanCom.className = 'fonte-badge fonte-badge-comunica';
+        spanCom.innerHTML = `📰 DJEN / Comunica PJe (${qtdPubs} publicação${qtdPubs === 1 ? '' : 'ões'})`;
+        fontesBadges.appendChild(spanCom);
+      }
+
+      if (fontesBadges.children.length === 0) {
+        const spanGen = document.createElement('span');
+        spanGen.className = 'fonte-badge fonte-badge-datajud';
+        spanGen.innerText = '🏛️ Base Oficial CNJ';
+        fontesBadges.appendChild(spanGen);
+      }
+
+      if (avisosLista) {
+        if (avisos.length > 0) {
+          avisosLista.innerHTML = '';
+          avisos.forEach(av => {
+            const divAviso = document.createElement('div');
+            divAviso.className = 'aviso-item';
+            divAviso.innerHTML = `<span>⚠️</span> <span>${av}</span>`;
+            avisosLista.appendChild(divAviso);
+          });
+          avisosLista.style.display = 'flex';
+        } else {
+          avisosLista.style.display = 'none';
+          avisosLista.innerHTML = '';
+        }
+      }
+
+      fontesBar.style.display = 'flex';
     }
 
+    // Badge de Grau
+    const badgeGrau = document.getElementById('badge-proc-grau');
+    if (badgeGrau) {
+      if (p.grau) {
+        badgeGrau.style.display = 'inline-block';
+        badgeGrau.innerText = p.grau === 'TR' ? 'Turma Recursal (TR)' : (p.grau === 'G2' ? '2º Grau (TJ)' : '1º Grau (Vara/JESP)');
+      } else {
+        badgeGrau.style.display = 'none';
+      }
+    }
+
+    // Botão de Link Externo (Autos no Tribunal)
+    const btnLink = document.getElementById('btn-proc-link-tribunal');
+    if (btnLink) {
+      if (p.link) {
+        btnLink.href = p.link;
+        btnLink.style.display = 'inline-flex';
+      } else {
+        btnLink.style.display = 'none';
+      }
+    }
+
+    // Botão de Peça Recente (DJEN/PJe)
+    const btnPeca = document.getElementById('btn-proc-link-peca');
+    if (btnPeca) {
+      const pecaUrl = p.link_peca || (p.link && (p.link.includes('ConsultaDocumento') || p.link.includes('listView.seam?x=')) ? p.link : null);
+      if (pecaUrl) {
+        btnPeca.href = pecaUrl;
+        btnPeca.style.display = 'inline-flex';
+      } else {
+        btnPeca.style.display = 'none';
+      }
+    }
+
+    // Metadados
+    document.getElementById('res-proc-classe').innerText = p.classe || 'Não especificada';
+    
+    // Tratamento de Assunto Inteligente (Evita duplicar classe)
+    let assuntoExibicao = p.assunto || 'Cível Geral';
+    if (p.assunto && p.classe && p.assunto.trim().toLowerCase() === p.classe.trim().toLowerCase()) {
+      assuntoExibicao = 'Cível Geral (Não especificado)';
+    }
+    document.getElementById('res-proc-assunto').innerText = assuntoExibicao;
+
+    const orgaoTexto = (p.orgao_julgador || 'Vara Cível') + (p.comarca ? ' (' + p.comarca + ')' : '');
+    document.getElementById('res-proc-orgao').innerText = orgaoTexto;
+
+    // Datas Processuais
+    const dataAjuiz = p.data_ajuizamento_formatada || formatarDataHora(p.data_ajuizamento) || 'N/D';
+    const dataUltima = p.data_ultima_movimentacao_formatada || formatarDataHora(p.data_ultima_movimentacao) || 'N/D';
+    document.getElementById('res-proc-datas').innerText = `Ajuizamento: ${dataAjuiz} · Última: ${dataUltima}`;
+
+    // Polos (Partes) e Advogados
+    const poloAtivoBox = document.getElementById('res-proc-polo-ativo');
+    if (poloAtivoBox) {
+      const autores = (p.polos?.ativo || []).map(a => a.nome).filter(Boolean);
+      poloAtivoBox.innerText = autores.length > 0 ? autores.join('; ') : 'Não informado';
+    }
+
+    const poloPassivoBox = document.getElementById('res-proc-polo-passivo');
+    if (poloPassivoBox) {
+      const reus = (p.polos?.passivo || []).map(r => r.nome).filter(Boolean);
+      poloPassivoBox.innerText = reus.length > 0 ? reus.join('; ') : 'Não informado';
+    }
+
+    const advBox = document.getElementById('res-proc-advogados');
+    if (advBox) {
+      const advs = (p.advogados || []).map(adv => `${adv.nome} (${adv.oab || 'OAB N/D'})`).filter(Boolean);
+      advBox.innerText = advs.length > 0 ? advs.join(' · ') : 'Nenhum advogado cadastrado';
+    }
+
+    // Renderiza linha do tempo com badges
+    renderizarMovimentacoes();
+
   } catch (err) {
+    if (loadingBox) loadingBox.style.display = 'none';
     alert("Erro ao consultar processo: " + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = btnOriginalHTML;
+    }
   }
+}
+
+// Renderização detalhada da timeline de movimentações
+function renderizarMovimentacoes() {
+  const movBox = document.getElementById('res-proc-movimentacoes');
+  if (!movBox) return;
+  movBox.innerHTML = '';
+
+  const movs = estadoApp.todasMovimentacoes || [];
+  const total = movs.length;
+  
+  const badgeTotal = document.getElementById('badge-total-movs');
+  if (badgeTotal) badgeTotal.innerText = `${total} registro(s) encontrado(s)`;
+
+  const btnToggle = document.getElementById('btn-toggle-todas-movs');
+  if (btnToggle) {
+    if (total <= 15) {
+      btnToggle.style.display = 'none';
+    } else {
+      btnToggle.style.display = 'inline-flex';
+      btnToggle.innerText = estadoApp.mostrarTodasMovs ? 'Ver menos (15)' : `Ver todas (${total})`;
+    }
+  }
+
+  const exibicao = estadoApp.mostrarTodasMovs ? movs : movs.slice(0, 15);
+
+  if (exibicao.length === 0) {
+    movBox.innerHTML = '<div class="text-muted" style="font-size: 13px; padding: 12px;">Sem movimentações registradas recentemente.</div>';
+    return;
+  }
+
+  exibicao.forEach((m, idx) => {
+    const item = document.createElement('div');
+    const isDJEN = m.fonte === 'comunica' || m.tipo === 'intimacao';
+    const borderCor = isDJEN ? '#a855f7' : 'var(--accent)';
+    const badgeFonte = isDJEN 
+      ? '<span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #a855f7; font-size: 10px; font-weight: 700;">DJEN / COMUNICA</span>' 
+      : '<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: var(--accent-text); font-size: 10px; font-weight: 700;">DATAJUD</span>';
+    
+    let badgeTipo = '';
+    if (m.tipo === 'sentenca') {
+      badgeTipo = '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: var(--danger); font-size: 10px; font-weight: 700;">SENTENÇA</span>';
+    } else if (m.tipo === 'decisao') {
+      badgeTipo = '<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--warning); font-size: 10px; font-weight: 700;">DECISÃO</span>';
+    } else if (m.tipo === 'despacho') {
+      badgeTipo = '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--success); font-size: 10px; font-weight: 700;">DESPACHO</span>';
+    }
+
+    const dataFormatada = m.data_formatada || formatarDataHora(m.data);
+    const urlPeca = m.link_peca || (m.link && (m.link.includes('ConsultaDocumento') || m.link.includes('listView.seam?x=') || m.link.includes('certidao') || m.link.includes('documento')) ? m.link : null);
+
+    let linkBtn = '<div style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px;">';
+    if (urlPeca) {
+      linkBtn += `<a href="${urlPeca}" target="_blank" rel="noopener noreferrer" style="color: #9333ea; background: rgba(147, 51, 234, 0.1); border: 1px solid rgba(147, 51, 234, 0.3); padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">📄 Abrir Peça (PDF) ↗</a>`;
+    }
+    linkBtn += `<button type="button" onclick="abrirDocumentoMovimentacao(${idx})" style="color: var(--accent-text); background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">📄 Ver Documento</button>`;
+    linkBtn += '</div>';
+
+    item.style = `padding: 10px 14px; background: var(--bg-subtle); border-radius: 6px; border-left: 4px solid ${borderCor}; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px;`;
+    item.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        ${badgeFonte}
+        ${badgeTipo}
+        <span class="text-muted" style="font-size: 11px; font-weight: 600;">${dataFormatada}</span>
+        ${m.orgao ? `<span class="text-muted" style="font-size: 11px;">· ${m.orgao}</span>` : ''}
+        ${linkBtn}
+      </div>
+      <div style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-top: 2px;">
+        ${m.descricao || m.nome || 'Movimentação Processual'}
+      </div>
+      ${m.complemento && m.complemento !== m.descricao ? `<div style="font-size: 12px; color: var(--text-muted); line-height: 1.4; margin-top: 2px;">${m.complemento}</div>` : ''}
+    `;
+    movBox.appendChild(item);
+  });
+}
+
+// Abre o Modal de Certidão / Documento da Movimentação (DataJud ou DJEN)
+function abrirDocumentoMovimentacao(idx) {
+  const movs = estadoApp.todasMovimentacoes || [];
+  const m = movs[idx];
+  const p = estadoApp.ultimaConsulta;
+  if (!m || !p) return;
+
+  const isDJEN = m.fonte === 'comunica';
+  const dataFormatada = m.data_formatada || formatarDataHora(m.data);
+  const urlPeca = m.link_peca || (m.link && (m.link.includes('ConsultaDocumento') || m.link.includes('listView.seam?x=') || m.link.includes('certidao') || m.link.includes('documento')) ? m.link : null);
+  const urlTribunal = p.link || m.link || '#';
+
+  document.getElementById('doc-modal-header-title').innerText = isDJEN
+    ? 'Certidão de Publicação / Comunicação Judicial (DJEN)'
+    : 'Certidão Oficial de Movimentação Processual (DataJud)';
+  document.getElementById('doc-modal-header-sub').innerText = `Processo ${p.numero} · ${p.tribunal || 'CNJ'} · ${dataFormatada}`;
+
+  document.getElementById('doc-paper-sistema').innerText = isDJEN
+    ? 'DIÁRIO DE JUSTIÇA ELETRÔNICO NACIONAL — DJEN / COMUNICA PJE'
+    : 'EXTRATO OFICIAL DE MOVIMENTAÇÃO PROCESSUAL — DATAJUD / CNJ';
+  document.getElementById('doc-paper-tribunal').innerText = `${p.tribunal || 'TRIBUNAL'} · ${(p.segmento || 'Poder Judiciário').toUpperCase()}`;
+
+  document.getElementById('doc-paper-numero').innerText = p.numero || '---';
+  document.getElementById('doc-paper-classe').innerText = `${p.classe || 'Não especificada'}${p.assunto && p.assunto !== p.classe ? ' — ' + p.assunto : ''}`;
+  document.getElementById('doc-paper-orgao').innerText = m.orgao || p.orgao_julgador || '---';
+  document.getElementById('doc-paper-data').innerText = `${dataFormatada}${m.data && m.data.includes('T') ? ' (' + m.data.substring(11, 19) + ' UTC)' : ''}`;
+  document.getElementById('doc-paper-partes').innerText = p.titulo || 'Não informado';
+
+  const tipoMap = {
+    sentenca: 'SENTENÇA / JULGAMENTO',
+    decisao: 'DECISÃO INTERLOCUTÓRIA',
+    despacho: 'DESPACHO JUDICIAL',
+    intimacao: 'INTIMAÇÃO / COMUNICAÇÃO',
+    publicacao_dje: 'PUBLICAÇÃO NO DIÁRIO ELETRÔNICO',
+    audiencia: 'AUDIÊNCIA',
+    outro: isDJEN ? 'COMUNICAÇÃO OFICIAL DJEN' : 'MOVIMENTAÇÃO PROCESSUAL (TPU/CNJ)'
+  };
+  document.getElementById('doc-paper-tipo-badge').innerText = tipoMap[m.tipo] || 'ANDAMENTO PROCESSUAL';
+  document.getElementById('doc-paper-id-externo').innerText = `ID: ${m.id_externo || 'CNJ-REG'}`;
+
+  document.getElementById('doc-paper-descricao').innerText = m.descricao || m.nome || 'Movimentação Processual';
+
+  // Monta o teor completo do documento
+  let teorTexto = m.complemento || m.descricao || '';
+  if (!isDJEN && (!m.complemento || m.complemento === m.descricao)) {
+    // Tenta localizar se há alguma publicação DJEN próxima ou exibe o registro estruturado completo do DataJud
+    teorTexto = `REGISTRO OFICIAL DE ANDAMENTO NOS AUTOS\n\n` +
+      `• Ato / Movimento (TPU/CNJ): ${m.descricao || '---'}\n` +
+      `• Complemento Tabelado: ${m.complemento || m.descricao || '---'}\n` +
+      `• Data e Hora do Lançamento: ${dataFormatada}${m.data && m.data.includes('T') ? ' às ' + m.data.substring(11, 19) : ''}\n` +
+      `• Unidade Judiciária: ${m.orgao || p.orgao_julgador || '---'}${p.comarca ? ' (' + p.comarca + ')' : ''}\n` +
+      `• Identificador de Sincronização DataJud: ${m.id_externo || 'N/D'}`;
+  }
+  document.getElementById('doc-paper-complemento').innerText = teorTexto;
+
+  document.getElementById('doc-paper-emissao').innerText = new Date().toLocaleString('pt-BR');
+  document.getElementById('doc-paper-hash').innerText = `FONTE: ${(m.fonte || 'DATAJUD').toUpperCase()} | REF: ${m.id_externo || p.numero_digitos}`;
+
+  const btnPDF = document.getElementById('doc-modal-btn-pdf');
+  if (btnPDF) {
+    if (urlPeca) {
+      btnPDF.href = urlPeca;
+      btnPDF.style.display = 'inline-flex';
+    } else {
+      btnPDF.style.display = 'none';
+    }
+  }
+
+  const btnTrib = document.getElementById('doc-modal-btn-tribunal');
+  if (btnTrib) {
+    if (urlTribunal && urlTribunal !== '#') {
+      btnTrib.href = urlTribunal;
+      btnTrib.style.display = 'inline-flex';
+    } else {
+      btnTrib.style.display = 'none';
+    }
+  }
+
+  const modal = document.getElementById('modal-doc-mov');
+  if (modal) {
+    modal.style.display = 'flex';
+  }
+}
+
+function fecharDocumentoMovimentacao() {
+  const modal = document.getElementById('modal-doc-mov');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function imprimirDocumentoMovimentacao() {
+  const conteudo = document.getElementById('doc-modal-printable');
+  if (!conteudo) return;
+  const win = window.open('', '_blank', 'width=860,height=720');
+  if (!win) {
+    window.print();
+    return;
+  }
+  win.document.write(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Certidão de Movimentação Processual</title>
+  <style>
+    body { font-family: "Segoe UI", Roboto, Georgia, serif; color: #0f172a; margin: 0; padding: 28px; background: #fff; }
+    .doc-paper { max-width: 760px; margin: 0 auto; }
+    .doc-paper-header { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #1e293b; padding-bottom: 14px; margin-bottom: 20px; }
+    .doc-paper-brasao { font-size: 32px; }
+    .doc-paper-rep { font-size: 11px; font-weight: 800; color: #475569; letter-spacing: 0.8px; }
+    .doc-paper-sis { font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+    .doc-paper-trib { font-size: 12px; font-weight: 600; color: #2563eb; margin-top: 2px; }
+    .doc-paper-meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 18px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px 18px; margin-bottom: 20px; }
+    .doc-meta-label { display: block; font-size: 10px; font-weight: 700; color: #64748b; }
+    .doc-meta-value { font-size: 13px; font-weight: 700; color: #0f172a; }
+    .doc-paper-section { border: 1px solid #cbd5e1; border-radius: 6px; padding: 20px; margin-bottom: 18px; }
+    .doc-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .doc-badge { padding: 3px 8px; font-size: 11px; font-weight: 800; background: #dbeafe; color: #1d4ed8; border-radius: 4px; }
+    .doc-paper-mov-title { font-size: 16px; font-weight: 800; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 1px dashed #cbd5e1; }
+    .doc-paper-teor { font-size: 13px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+    .doc-paper-notice { font-size: 11px; color: #475569; background: #f1f5f9; border-left: 4px solid #3b82f6; padding: 8px 12px; margin-bottom: 18px; }
+    .doc-paper-footer { display: flex; justify-content: space-between; border-top: 1px solid #cbd5e1; padding-top: 10px; font-size: 10px; color: #64748b; }
+  </style>
+</head>
+<body>
+  ${conteudo.innerHTML}
+  <script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`);
+  win.document.close();
+}
+
+// Alternar entre ver 15 ou todas as movimentações
+function alternarTodasMovimentacoes() {
+  estadoApp.mostrarTodasMovs = !estadoApp.mostrarTodasMovs;
+  renderizarMovimentacoes();
+}
+
+// 1-Click Auto-Fill para Liquidação Judicial
+function copiarDadosParaLiquidacao() {
+  if (!estadoApp.ultimaConsulta) {
+    alert("Nenhum processo consultado no momento.");
+    return;
+  }
+  const p = estadoApp.ultimaConsulta;
+  
+  // Muda de aba
+  navegarPara('liquidacao');
+
+  // Preenche processo e partes
+  const numInput = document.getElementById('calc-processo-num');
+  if (numInput) numInput.value = p.numero || '';
+
+  const partesInput = document.getElementById('calc-partes-nomes');
+  if (partesInput) partesInput.value = p.titulo || '';
+
+  // Ajusta indexador de acordo com o tribunal do processo
+  const selIndexador = document.getElementById('calc-indexador');
+  if (selIndexador && p.tribunal) {
+    const trib = p.tribunal.toUpperCase();
+    if (trib.includes('TJSP')) selIndexador.value = 'TJSP';
+    else if (trib.includes('TJMG')) selIndexador.value = 'TJMG';
+    else if (trib.includes('TJRJ')) selIndexador.value = 'TJRJ';
+    else if (trib.includes('TRF') || trib.includes('JF')) selIndexador.value = 'JF_GERAL';
+    else if (trib.includes('TRT') || trib.includes('TST')) selIndexador.value = 'INPC';
+  }
+
+  alert(`Dados do processo ${p.numero} importados com sucesso para a Liquidação Judicial!`);
 }
 
 // 4. Liquidação Judicial de Sentença
@@ -226,6 +699,13 @@ function removerLinhaParcela(btn) {
 }
 
 async function executarCalculoLiquidacao() {
+  const btn = document.querySelector('#view-liquidacao .btn-primary');
+  const btnOriginalHTML = btn ? btn.innerHTML : '⚡ Processar Liquidação Judicial';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Processando...';
+  }
+
   const dataAdQuem = document.getElementById('calc-data-ad-quem').value;
   const indexador = document.getElementById('calc-indexador').value;
   const tipoJuros = document.getElementById('calc-tipo-juros').value;
@@ -282,6 +762,11 @@ async function executarCalculoLiquidacao() {
 
   } catch (err) {
     alert("Erro na requisição: " + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = btnOriginalHTML;
+    }
   }
 }
 
@@ -346,6 +831,13 @@ async function exportarCSVMemoria() {
 
 // 6. Revisão Bancária
 async function executarCalculoRevisional() {
+  const btn = document.querySelector('#view-revisional .btn-primary');
+  const btnOriginalHTML = btn ? btn.innerHTML : '⚡ Calcular Revisão Contratual';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Calculando...';
+  }
+
   const valorFinanciado = parseFloat(document.getElementById('rev-valor-financiado').value) || 0;
   const numParcelas = parseInt(document.getElementById('rev-num-parcelas').value) || 0;
   const taxaContrato = parseFloat(document.getElementById('rev-taxa-contrato').value) || 0;
@@ -386,11 +878,23 @@ async function executarCalculoRevisional() {
 
   } catch (err) {
     alert("Erro ao calcular revisional: " + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = btnOriginalHTML;
+    }
   }
 }
 
 // 7. Prazos Forenses
 async function executarCalculoPrazo() {
+  const btn = document.querySelector('#view-prazos .btn-primary');
+  const btnOriginalHTML = btn ? btn.innerHTML : '⚡ Calcular Vencimento Fatal';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Calculando...';
+  }
+
   const dtDisp = document.getElementById('prazo-data-disp').value;
   const dias = parseInt(document.getElementById('prazo-dias').value) || 0;
   const rito = document.getElementById('prazo-rito').value;
@@ -436,6 +940,11 @@ async function executarCalculoPrazo() {
 
   } catch (err) {
     alert("Erro ao calcular prazo: " + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = btnOriginalHTML;
+    }
   }
 }
 
@@ -464,6 +973,13 @@ async function carregarIndices() {
 }
 
 async function sincronizarIndicesBacen() {
+  const btn = document.querySelector('#view-indices .btn-primary') || (typeof event !== 'undefined' && event?.target);
+  const btnOriginalHTML = btn ? btn.innerHTML : '🔄 Sincronizar Agora com Bacen/IBGE';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Sincronizando...';
+  }
+
   try {
     const res = await fetch('/api/indices/sincronizar', { method: 'POST' });
     const data = await res.json();
@@ -471,6 +987,11 @@ async function sincronizarIndicesBacen() {
     carregarIndices();
   } catch (err) {
     alert("Falha na sincronização: " + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = btnOriginalHTML;
+    }
   }
 }
 

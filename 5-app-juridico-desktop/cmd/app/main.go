@@ -38,8 +38,14 @@ func main() {
 	_ = os.MkdirAll(appDataDir, 0755)
 	dbPath := filepath.Join(appDataDir, "desktop.db")
 
+	dataJudKey := os.Getenv("DATAJUD_API_KEY")
+	if dataJudKey == "" {
+		dataJudKey = "cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=="
+	}
+
 	cfg := bridge.ConfigDesktop{
-		Versao: VersaoApp,
+		Versao:        VersaoApp,
+		DataJudAPIKey: dataJudKey,
 	}
 
 	core, err := bridge.NovoCoreBridge(cfg)

@@ -62,6 +62,7 @@ type Movimentacao struct {
 	Orgao         string    `json:"orgao"`
 	Fonte         string    `json:"fonte"`
 	Link          string    `json:"link"`
+	LinkPeca      string    `json:"link_peca,omitempty"`
 	IDExterno     string    `json:"-"` // identificador único interno para deduplicação
 }
 
@@ -76,6 +77,7 @@ type Publicacao struct {
 	Classe               string     `json:"classe"`
 	Texto                string     `json:"texto"`
 	Link                 string     `json:"link"`
+	LinkPeca             string     `json:"link_peca,omitempty"`
 	Partes               []Parte    `json:"partes"`
 	Advogados            []Advogado `json:"advogados"`
 }
@@ -105,6 +107,7 @@ type Processo struct {
 	OrgaoJulgador                  string         `json:"orgao_julgador"`
 	Comarca                        string         `json:"comarca"`
 	Link                           string         `json:"link"`
+	LinkPeca                       string         `json:"link_peca,omitempty"`
 	ValorCausa                     *float64       `json:"valor_causa"`
 	ValorCausaFormatado            string         `json:"valor_causa_formatado"`
 	DataAjuizamento                *time.Time     `json:"data_ajuizamento"`

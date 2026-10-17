@@ -342,6 +342,161 @@ input:focus, select:focus, textarea:focus {
   font-size: 12px;
 }
 
+.btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Spinner animado */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  border-top-color: #ffffff;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.btn-secondary .spinner {
+  border-color: rgba(255, 255, 255, 0.2);
+  border-top-color: var(--text-main);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.92); }
+}
+
+/* Card de Carregamento das Fontes Oficiais */
+.consulta-loading-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 28px;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(59, 130, 246, 0.06) 100%);
+}
+
+.consulta-loading-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  flex-shrink: 0;
+}
+
+.spinner-lg {
+  width: 26px;
+  height: 26px;
+  border: 3px solid rgba(59, 130, 246, 0.25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.85s linear infinite;
+}
+
+.consulta-loading-content h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 4px 0;
+}
+
+.consulta-loading-content p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 12px 0;
+}
+
+.consulta-loading-sources {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.source-pill-active {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--accent-text);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  animation: pulse-glow 1.2s ease-in-out infinite;
+}
+
+/* Barra de Fontes Consultadas e Avisos no Resultado */
+.consulta-fontes-bar {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.fonte-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fonte-badge-datajud {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-text);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.fonte-badge-comunica {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+.aviso-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
 /* Tables */
 table.data-table {
   width: 100%;
@@ -377,6 +532,193 @@ table.data-table tbody tr:hover {
 
 .view-section.active {
   display: flex;
+}
+
+/* Modal de Documento / Certidão de Movimentação */
+.doc-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.doc-modal-window {
+  width: 100%;
+  max-width: 880px;
+  max-height: 92vh;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.doc-modal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.doc-modal-body {
+  padding: 28px;
+  overflow-y: auto;
+  background: #0f172a;
+  display: flex;
+  justify-content: center;
+}
+
+[data-theme="light"] .doc-modal-body {
+  background: #e2e8f0;
+}
+
+.doc-paper {
+  width: 100%;
+  max-width: 760px;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 6px;
+  padding: 40px 48px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  font-family: "Segoe UI", Roboto, Georgia, serif;
+}
+
+.doc-paper-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid #1e293b;
+  padding-bottom: 16px;
+  margin-bottom: 22px;
+}
+
+.doc-paper-brasao {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.doc-paper-rep {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #475569;
+}
+
+.doc-paper-sis {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 2px;
+}
+
+.doc-paper-trib {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  margin-top: 2px;
+}
+
+.doc-paper-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px 20px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.doc-meta-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.doc-meta-value {
+  font-size: 13px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.doc-paper-section {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 22px 24px;
+  background: #ffffff;
+  margin-bottom: 20px;
+}
+
+.doc-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.doc-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 4px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  text-transform: uppercase;
+}
+
+.doc-paper-mov-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 14px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
+.doc-paper-teor {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #1e293b;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.doc-paper-notice {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #475569;
+  background: #f1f5f9;
+  border-left: 4px solid #3b82f6;
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-bottom: 22px;
+}
+
+.doc-paper-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #cbd5e1;
+  padding-top: 12px;
+  font-size: 11px;
+  color: #64748b;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* Print Styles for A4 Legal Report */

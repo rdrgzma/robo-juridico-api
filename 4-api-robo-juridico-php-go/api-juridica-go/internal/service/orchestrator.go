@@ -173,8 +173,14 @@ func (o *Orquestrador) montarProcessoDasPublicacoes(procCNJ *cnj.ProcessoCNJ, pu
 			assunto = pub.TipoDocumento
 		}
 		for _, parte := range pub.Partes {
-			if _, ok := partesMap[parte.Nome]; !ok || partesMap[parte.Nome].Polo == domain.PoloTerceiro {
-				partesMap[parte.Nome] = parte
+			nomeLimpo := comunica.LimparNomeParte(parte.Nome)
+			if !comunica.EhNomeParteValido(nomeLimpo) {
+				continue
+			}
+			parte.Nome = nomeLimpo
+			chave := strings.ToUpper(nomeLimpo)
+			if _, ok := partesMap[chave]; !ok || partesMap[chave].Polo == domain.PoloTerceiro {
+				partesMap[chave] = parte
 			}
 		}
 		for _, adv := range pub.Advogados {
@@ -192,6 +198,7 @@ func (o *Orquestrador) montarProcessoDasPublicacoes(procCNJ *cnj.ProcessoCNJ, pu
 			Orgao:         pub.Orgao,
 			Fonte:         string(domain.FonteComunica),
 			Link:          pub.Link,
+			LinkPeca:      pub.LinkPeca,
 			IDExterno:     fmt.Sprintf("comunica-%s", pub.ID),
 		})
 	}
@@ -222,17 +229,32 @@ func (o *Orquestrador) montarProcessoDasPublicacoes(procCNJ *cnj.ProcessoCNJ, pu
 		}
 	}
 
+	grauInferido := comunica.InferirGrau(primeira.Orgao, primeira.Classe)
+	linkTribunal := cnj.GerarLinkTribunal(procCNJ.Formatado, procCNJ.Tribunal, grauInferido, procCNJ.OrigemCodigo)
+	if strings.Contains(primeira.Link, "proc_resultado.jsp") {
+		linkTribunal = primeira.Link
+	}
+
+	linkPecaMaisRecente := ""
+	for _, pub := range pubs {
+		if pub.LinkPeca != "" {
+			linkPecaMaisRecente = pub.LinkPeca
+			break
+		}
+	}
+
 	proc := &domain.Processo{
 		Numero:                         procCNJ.Formatado,
 		NumeroDigitos:                  procCNJ.Digitos,
 		Tribunal:                       procCNJ.Tribunal,
 		Segmento:                       procCNJ.NomeSegmento,
-		Grau:                           comunica.InferirGrau(primeira.Orgao, primeira.Classe),
+		Grau:                           grauInferido,
 		Classe:                         primeira.Classe,
 		Assunto:                        assunto,
 		OrgaoJulgador:                  primeira.Orgao,
 		Comarca:                        comarca,
-		Link:                           primeira.Link,
+		Link:                           linkTribunal,
+		LinkPeca:                       linkPecaMaisRecente,
 		ValorCausa:                     valorCausa,
 		ValorCausaFormatado:            datajud.FormatarDinheiroBR(valorCausa),
 		DataAjuizamento:                dataAjuizamento,
@@ -273,11 +295,24 @@ func (o *Orquestrador) juntarPublicacoes(proc *domain.Processo, pubs []domain.Pu
 		proc.Fontes = append(proc.Fontes, string(domain.FonteComunica))
 	}
 
-	if proc.Link == "" && len(pubs) > 0 {
-		proc.Link = pubs[0].Link
+	pCNJ := cnj.Parse(proc.Numero)
+
+	// 1. Identifica a peça mais recente entre as publicações do DJEN
+	for _, pub := range pubs {
+		linkP := pub.LinkPeca
+		if linkP == "" && pub.Link != "" && (strings.Contains(pub.Link, "ConsultaDocumento") || strings.Contains(pub.Link, "listView.seam?x=")) {
+			linkP = pub.Link
+		}
+		if linkP != "" {
+			proc.LinkPeca = linkP
+			break
+		}
 	}
 
-	pCNJ := cnj.Parse(proc.Numero)
+	// 2. Garante que proc.Link aponte para a consulta oficial dos autos no Tribunal
+	if proc.Link == "" || strings.Contains(proc.Link, "ConsultaDocumento") || strings.Contains(proc.Link, "listView.seam?x=") {
+		proc.Link = cnj.GerarLinkTribunal(proc.Numero, proc.Tribunal, proc.Grau, pCNJ.OrigemCodigo)
+	}
 
 	// Extrai comarca exata da publicação ou do código de origem CNJ caso o DataJud não tenha informado (ou tenha vindo genérica da Turma Recursal)
 	if proc.Comarca == "" || strings.Contains(proc.Comarca, ",") {
@@ -318,6 +353,10 @@ func (o *Orquestrador) juntarPublicacoes(proc *domain.Processo, pubs []domain.Pu
 		idExt := fmt.Sprintf("comunica-%s", pub.ID)
 		if !jaTem[idExt] {
 			t, df := comunica.ParseDataDJEN(pub.DataDisponibilizacao)
+			linkP := pub.LinkPeca
+			if linkP == "" && pub.Link != "" && (strings.Contains(pub.Link, "ConsultaDocumento") || strings.Contains(pub.Link, "listView.seam?x=")) {
+				linkP = pub.Link
+			}
 			proc.Movimentacoes = append(proc.Movimentacoes, domain.Movimentacao{
 				Data:          t,
 				DataFormatada: df,
@@ -327,19 +366,51 @@ func (o *Orquestrador) juntarPublicacoes(proc *domain.Processo, pubs []domain.Pu
 				Orgao:         pub.Orgao,
 				Fonte:         string(domain.FonteComunica),
 				Link:          pub.Link,
+				LinkPeca:      linkP,
 				IDExterno:     idExt,
 			})
 			jaTem[idExt] = true
 		}
 	}
 
-	// Preenche orgao e link padrão nos movimentos que não possuírem
+	// Preenche órgão padrão, Link de consulta do Tribunal e correlaciona LinkPeca quando houver publicação DJEN correspondente
 	for i := range proc.Movimentacoes {
 		if proc.Movimentacoes[i].Orgao == "" && proc.OrgaoJulgador != "" {
 			proc.Movimentacoes[i].Orgao = proc.OrgaoJulgador
 		}
 		if proc.Movimentacoes[i].Link == "" && proc.Link != "" {
 			proc.Movimentacoes[i].Link = proc.Link
+		}
+		// Se for movimento do DataJud sem LinkPeca, verifica se é publicação/ato judicial correspondente a uma publicação do DJEN (janela de até 3 dias)
+		if proc.Movimentacoes[i].Fonte == string(domain.FonteDataJud) && proc.Movimentacoes[i].LinkPeca == "" {
+			tipoMov := proc.Movimentacoes[i].Tipo
+			descLower := strings.ToLower(proc.Movimentacoes[i].Descricao)
+			ehAtoPublicavel := tipoMov == string(domain.TipoPublicacaoDJE) ||
+				tipoMov == string(domain.TipoIntimacao) ||
+				tipoMov == string(domain.TipoSentenca) ||
+				tipoMov == string(domain.TipoDecisao) ||
+				tipoMov == string(domain.TipoDespacho) ||
+				strings.Contains(descLower, "publica") ||
+				strings.Contains(descLower, "diário") ||
+				strings.Contains(descLower, "expedição")
+			if ehAtoPublicavel && !proc.Movimentacoes[i].Data.IsZero() {
+				for _, pub := range pubs {
+					if pub.LinkPeca == "" {
+						continue
+					}
+					tPub, _ := comunica.ParseDataDJEN(pub.DataDisponibilizacao)
+					if !tPub.IsZero() {
+						diff := tPub.Sub(proc.Movimentacoes[i].Data)
+						if diff < 0 {
+							diff = -diff
+						}
+						if diff <= 72*time.Hour {
+							proc.Movimentacoes[i].LinkPeca = pub.LinkPeca
+							break
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -363,7 +434,12 @@ func (o *Orquestrador) juntarPublicacoes(proc *domain.Processo, pubs []domain.Pu
 	}
 	for _, pub := range pubs {
 		for _, parte := range pub.Partes {
-			chave := strings.ToUpper(strings.TrimSpace(parte.Nome))
+			nomeLimpo := comunica.LimparNomeParte(parte.Nome)
+			if !comunica.EhNomeParteValido(nomeLimpo) {
+				continue
+			}
+			parte.Nome = nomeLimpo
+			chave := strings.ToUpper(nomeLimpo)
 			if !nomesPartes[chave] {
 				nomesPartes[chave] = true
 				proc.Partes = append(proc.Partes, parte)
@@ -522,14 +598,29 @@ func filtrarPolo(partes []domain.Parte, polo domain.Polo) []domain.Parte {
 }
 
 func montarTitulo(polos domain.Polos) string {
-	var ativos []string
-	for _, p := range polos.Ativo {
-		ativos = append(ativos, p.Nome)
+	extrairNomes := func(partes []domain.Parte) []string {
+		var nomes []string
+		for _, p := range partes {
+			n := comunica.LimparNomeParte(p.Nome)
+			if !comunica.EhNomeParteValido(n) {
+				continue
+			}
+			jaExiste := false
+			for _, existente := range nomes {
+				if strings.EqualFold(n, existente) {
+					jaExiste = true
+					break
+				}
+			}
+			if !jaExiste {
+				nomes = append(nomes, n)
+			}
+		}
+		return nomes
 	}
-	var passivos []string
-	for _, p := range polos.Passivo {
-		passivos = append(passivos, p.Nome)
-	}
+
+	ativos := extrairNomes(polos.Ativo)
+	passivos := extrairNomes(polos.Passivo)
 
 	ativoStr := "—"
 	if len(ativos) > 0 {

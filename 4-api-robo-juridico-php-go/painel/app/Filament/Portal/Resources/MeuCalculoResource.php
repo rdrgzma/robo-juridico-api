@@ -50,7 +50,16 @@ class MeuCalculoResource extends Resource
                     ->label('Processo CNJ')
                     ->fontFamily('mono')
                     ->placeholder('Extrajudicial')
-                    ->searchable(),
+                    ->searchable()
+                    ->icon('heroicon-m-arrow-top-right-on-square')
+                    ->iconPosition('after')
+                    ->color('primary')
+                    ->url(function (CalculoSalvo $record): ?string {
+                        if (empty($record->numero_processo)) return null;
+                        $num = preg_replace('/\D+/', '', (string) $record->numero_processo);
+                        return "https://comunica.pje.jus.br/consulta?numeroProcesso={$num}";
+                    })
+                    ->openUrlInNewTab(),
                 Tables\Columns\TextColumn::make('data_atualizacao')
                     ->label('Data-Base')
                     ->date('d/m/Y')

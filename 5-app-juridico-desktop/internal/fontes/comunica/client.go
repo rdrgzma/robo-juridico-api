@@ -19,7 +19,18 @@ const (
 	RefererComunica = "https://comunica.pje.jus.br/"
 )
 
-var regexSomenteDigitos = regexp.MustCompile(`\D`)
+var (
+	regexSomenteDigitos = regexp.MustCompile(`\D`)
+	regexURLPeca        = regexp.MustCompile(`(?i)https?://[^\s"'<>]+(?:ConsultaDocumento|listView\.seam\?x=)[^\s"'<>]+`)
+)
+
+// ExtrairLinkPecaDoTexto procura URL direta para autenticação/visualização de documento no texto da publicação
+func ExtrairLinkPecaDoTexto(texto string) string {
+	if m := regexURLPeca.FindString(texto); m != "" {
+		return strings.ReplaceAll(m, ":443/", "/")
+	}
+	return ""
+}
 
 type ClienteComunica struct {
 	httpCliente   *network.ClienteHTTP
@@ -182,7 +193,38 @@ func (c *ClienteComunica) montarPublicacao(item map[string]any) domain.Publicaca
 	classe, _ := item["nomeClasse"].(string)
 	classe = NormalizarCaixaAlta(classe)
 	textoBruto, _ := item["texto"].(string)
+	hash, _ := item["hash"].(string)
+	hash = strings.TrimSpace(hash)
 	link, _ := item["link"].(string)
+	link = strings.TrimSpace(link)
+	if link != "" {
+		link = strings.ReplaceAll(link, ":443/", "/")
+	}
+
+	// URLs legadas de sistemas internos como proc_resultado.jsp do TJMG retornam erro 500
+	if strings.Contains(link, "proc_resultado.jsp") {
+		link = ""
+	}
+
+	linkPeca := ""
+	if link != "" && (strings.Contains(link, "ConsultaDocumento") || strings.Contains(link, "listView.seam?x=") || strings.Contains(link, "documento") || strings.Contains(link, "download") || strings.Contains(link, "certidao")) {
+		linkPeca = link
+	}
+
+	if linkPeca == "" {
+		if extraido := ExtrairLinkPecaDoTexto(textoBruto); extraido != "" {
+			linkPeca = extraido
+		}
+	}
+
+	// Se não houver link direto com código do documento no PJe, usa o documento PDF oficial certificado do DJEN/CNJ via hash
+	if linkPeca == "" && hash != "" {
+		linkPeca = fmt.Sprintf("https://comunicaapi.pje.jus.br/api/v1/comunicacao/%s/certidao", hash)
+	}
+
+	if link == "" {
+		link = linkPeca
+	}
 
 	partes := []domain.Parte{}
 	if dests, ok := item["destinatarios"].([]any); ok {
@@ -233,7 +275,9 @@ func (c *ClienteComunica) montarPublicacao(item map[string]any) domain.Publicaca
 	}
 
 	textoLimpo := ExtrairTeor(textoBruto)
-	partes = ExtrairPartesDoTexto(textoLimpo, partes)
+	if len(partes) == 0 {
+		partes = ExtrairPartesDoTexto(textoLimpo, partes)
+	}
 
 	return domain.Publicacao{
 		ID:                   id,
@@ -246,6 +290,7 @@ func (c *ClienteComunica) montarPublicacao(item map[string]any) domain.Publicaca
 		Classe:               classe,
 		Texto:                textoLimpo,
 		Link:                 link,
+		LinkPeca:             linkPeca,
 		Partes:               partes,
 		Advogados:            advs,
 	}

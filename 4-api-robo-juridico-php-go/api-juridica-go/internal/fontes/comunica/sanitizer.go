@@ -16,10 +16,12 @@ var (
 	regexEspacos = regexp.MustCompile(`\s+`)
 	regexDivBody     = regexp.MustCompile(`(?is)<div[^>]+id=["']divBody["'][^>]*>(.*?)</div>`)
 	regexComarcaPub  = regexp.MustCompile(`(?i)Comarca\s+de\s+([A-ZÀ-Úa-zà-ú\s]+?)(?:\s*[/\-\n,.]|\s+Avenida|\s+Rua|\s+Praça|$)`)
-	regexPoloAtivo   = regexp.MustCompile(`(?i)(?:AUTOR(?:A|ES)?|REQUERENTE(?:S)?|EXEQUENTE(?:S)?|RECORRENTE(?:S)?|IMPETRANTE(?:S)?|POLO\s+ATIVO)\s*:\s*([A-ZÀ-Ú0-9][^\n\r;|]+?)(?:\s+(?:CPF|CNPJ|R[ÉE]U|REQUERID|EXECUTAD|RECORRID|IMPETRAD|POLO\s+PASSIVO|ADVOGAD)|$)`)
-	regexPoloPassivo = regexp.MustCompile(`(?i)(?:R[ÉE]U(?:S)?|REQUERID[OA](?:S)?|EXECUTAD[OA](?:S)?|RECORRID[OA](?:S)?|IMPETRAD[OA](?:S)?|POLO\s+PASSIVO)\s*:\s*([A-ZÀ-Ú0-9][^\n\r;|]+?)(?:\s+(?:CPF|CNPJ|AUTOR|REQUERENT|EXEQUENT|ADVOGAD|TERCEIR)|$)`)
+	regexPoloAtivo   = regexp.MustCompile(`(?i)(?:AUTOR(?:A|ES)?|REQUERENTE(?:S)?|EXEQUENTE(?:S)?|RECORRENTE(?:S)?|IMPETRANTE(?:S)?|POLO\s+ATIVO)\s*:\s*([A-ZÀ-Ú0-9][^\n\r;|]{2,80}?)(?:\s+(?:CPF|CNPJ|R[ÉE]U|REQUERID|EXECUTAD|RECORRID|IMPETRAD|POLO\s+PASSIVO|ADVOGAD|REPRESENTANTE|DESPACHO|DECIS[ÃA]O|SENTEN[ÇC]A)|$)`)
+	regexPoloPassivo = regexp.MustCompile(`(?i)(?:R[ÉE]U(?:S)?|REQUERID[OA](?:S)?|EXECUTAD[OA](?:S)?|RECORRID[OA](?:S)?|IMPETRAD[OA](?:S)?|POLO\s+PASSIVO)\s*:\s*([A-ZÀ-Ú0-9][^\n\r;|]{2,80}?)(?:\s+(?:CPF|CNPJ|AUTOR|REQUERENT|EXEQUENT|ADVOGAD|TERCEIR|REPRESENTANTE|DESPACHO|DECIS[ÃA]O|SENTEN[ÇC]A)|$)`)
 	regexParteDoc    = regexp.MustCompile(`(?:\(\d+\)|PROCESSO\s+N[º°]?:\s*[\d\.\-]+.*?)?\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s\.\-&]{3,80}?)\s+(?:CPF|CNPJ)\s*:\s*[\d\.\-\/]+`)
 	regexValorCausa  = regexp.MustCompile(`(?i)(?:valor\s+(?:da\s+causa|atribu[íi]do\s+[àa]\s+causa|da\s+a[çc][ãa]o|da\s+execu[çc][ãa]o|da\s+condena[çc][ãa]o|do\s+d[ée]bito)|causa\s+avaliada\s+em)\s*[:\-]?\s*R\$\s*([\d\.]+\,\d{2})`)
+	regexClasseCodigoPrefixo   = regexp.MustCompile(`(?i)^.*?\(\s*\d{2,6}\s*\)\s*`)
+	regexRepresentantesSufixo = regexp.MustCompile(`(?i)\s+(?:REPRESENTANTES?\s+POLO\s+(?:ATIVO|PASSIVO)\s*:|REPRESENTANTES?\s*:|ADVOGAD[OA]S?\s*:|PROCURADOR(?:ES)?\s*:).*$`)
 )
 
 var comarcasTJMG = map[int]string{
@@ -65,10 +67,7 @@ var comarcasTJMG = map[int]string{
 func FormatarID(raw any) string {
 	switch v := raw.(type) {
 	case float64:
-		return strings.TrimSpace(strings.Split(strings.TrimRight(strings.TrimRight(
-			func() string {
-				return strconvFormatFloat(v)
-			}(), "0"), "."), ".")[0])
+		return strconvFormatFloat(v)
 	case string:
 		return strings.TrimSpace(v)
 	default:
@@ -219,8 +218,8 @@ func ExtrairPartesDoTexto(texto string, existentes []domain.Parte) []domain.Part
 	}
 
 	adicionar := func(nome string, polo domain.Polo) {
-		nome = limparNomeParte(nome)
-		if len(nome) < 3 {
+		nome = LimparNomeParte(nome)
+		if !EhNomeParteValido(nome) {
 			return
 		}
 		chave := strings.ToUpper(nome)
@@ -257,7 +256,7 @@ func ExtrairPartesDoTexto(texto string, existentes []domain.Parte) []domain.Part
 		if len(m) < 2 {
 			continue
 		}
-		candidato := limparNomeParte(m[1])
+		candidato := LimparNomeParte(m[1])
 		if idx == 0 && !temAtivo {
 			adicionar(candidato, domain.PoloAtivo)
 		} else if idx >= 1 && !temPassivo {
@@ -268,16 +267,58 @@ func ExtrairPartesDoTexto(texto string, existentes []domain.Parte) []domain.Part
 	return resultado
 }
 
-func limparNomeParte(s string) string {
-	s = strings.TrimSpace(s)
-	// Se contiver prefixos do cabeçalho antes do nome (ex: "FAZENDA PÚBLICA (14695) MARIA..."), pega após o último ')'
-	if idx := strings.LastIndex(s, ")"); idx != -1 && idx+1 < len(s) {
-		s = strings.TrimSpace(s[idx+1:])
+func EhNomeParteValido(nome string) bool {
+	nome = strings.TrimSpace(nome)
+	if len(nome) < 3 || len(nome) > 85 {
+		return false
 	}
-	// Remove prefixos residuais como "e outros"
+	upper := strings.ToUpper(nome)
+	// Termos puramente de sufixo empresarial isolado (que não formam um nome por si só)
+	sufixosIsolados := map[string]bool{
+		"LTDA": true, "LTDA.": true, "S.A.": true, "S/A": true, "SA": true,
+		"ME": true, "EPP": true, "EIRELI": true, "MEI": true, "S/S": true, "SS": true,
+	}
+	if sufixosIsolados[upper] || sufixosIsolados[strings.Trim(upper, " ./-")] {
+		return false
+	}
+
+	palavrasProibidas := []string{
+		"DESPACHO", "DECISÃO", "DECISAO", "SENTENÇA", "SENTENCA",
+		"JUIZ FEDERAL", "JUIZ DE DIREITO", "JUIZA FEDERAL", "JUÍZA",
+		"CUMPRA-SE", "INTIMEM-SE", "INTIME-SE", "RETORNEM CONCLUSOS",
+		"CONCLUSOS", "MANIFESTEM", "SEGUIMENTO DO FEITO", "PRAZO DE",
+		"SUBSEÇÃO JUDICIÁRIA", "SUBSECAO JUDICIARIA", "VARA FEDERAL",
+		"VARA CÍVEL", "VARA CIVEL", "COMARCA DE", "DIAS, E REQUEIRAM",
+		"CONSIDERANDO A REMESSA", "ASSINADO ELETRONICAMENTE", "ASSINATURA ELETRÔNICA",
+		"PODER JUDICIÁRIO", "PODER JUDICIARIO", "JUSTIÇA FEDERAL", "JUSTICA FEDERAL",
+		"MANDADO DE SEGURANÇA", "MANDADO DE SEGURANCA",
+	}
+	for _, p := range palavrasProibidas {
+		if strings.Contains(upper, p) {
+			return false
+		}
+	}
+	return true
+}
+
+func LimparNomeParte(s string) string {
+	s = strings.TrimSpace(s)
+	// Se contiver código numérico de classe entre parênteses antes do nome (ex: "...(14695) MARIA..."), pega após o código
+	if m := regexClasseCodigoPrefixo.FindStringIndex(s); len(m) == 2 {
+		s = strings.TrimSpace(s[m[1]:])
+	}
+	// Trunca sufixo de representantes ou advogados (ex: "... REPRESENTANTES POLO ATIVO: GISELE...")
+	if m := regexRepresentantesSufixo.FindStringIndex(s); len(m) == 2 {
+		s = strings.TrimSpace(s[:m[0]])
+	}
 	s = strings.TrimPrefix(s, "e outros ")
+	s = strings.TrimPrefix(s, "E OUTROS ")
+	s = strings.TrimSuffix(s, " e outros")
+	s = strings.TrimSuffix(s, " E OUTROS")
 	s = strings.TrimSuffix(s, " -")
-	return strings.TrimSpace(s)
+	s = strings.TrimSuffix(s, ":")
+	s = strings.TrimSpace(s)
+	return s
 }
 
 func SemHTML(textoHTML string) string {

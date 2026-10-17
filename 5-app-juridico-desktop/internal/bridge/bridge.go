@@ -64,6 +64,9 @@ func NovoCoreBridge(cfg ConfigDesktop) (*CoreBridge, error) {
 	if cfg.Versao == "" {
 		cfg.Versao = "1.0.0-desktop"
 	}
+	if cfg.DataJudAPIKey == "" {
+		cfg.DataJudAPIKey = "cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=="
+	}
 	if cfg.DataJudTimeout == 0 {
 		cfg.DataJudTimeout = 25 * time.Second
 	}

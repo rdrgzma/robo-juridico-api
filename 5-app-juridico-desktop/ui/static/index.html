@@ -135,20 +135,58 @@
             </select>
           </div>
           <div class="form-group">
-            <button class="btn btn-primary" onclick="executarConsultaProcesso()">Buscar Processo</button>
+            <button id="btn-exec-consulta-processo" class="btn btn-primary" onclick="executarConsultaProcesso()">Buscar Processo</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Banner Elegante de Consulta em Andamento -->
+      <div id="consulta-loading-box" style="display: none;" class="card consulta-loading-card">
+        <div class="consulta-loading-icon">
+          <div class="spinner-lg"></div>
+        </div>
+        <div class="consulta-loading-content">
+          <h3 id="consulta-loading-titulo">Consultando Fontes Oficiais da Justiça Brasileira...</h3>
+          <p id="consulta-loading-subtitulo">Buscando metadados processuais, partes, advogados e publicações para o processo <strong id="consulta-loading-cnj" class="text-accent">---</strong></p>
+          <div class="consulta-loading-sources">
+            <span id="loading-pill-datajud" class="source-pill source-pill-active">
+              <span class="pulse-dot"></span> 🏛️ DataJud (CNJ / Elasticsearch)
+            </span>
+            <span id="loading-pill-djen" class="source-pill source-pill-active">
+              <span class="pulse-dot"></span> 📰 DJEN / Comunica PJe (Diário Eletrônico)
+            </span>
           </div>
         </div>
       </div>
 
       <div id="resultado-consulta-box" style="display: none;" class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; flex-wrap: wrap; gap: 10px;">
           <div>
-            <h3 id="res-proc-titulo" class="text-accent" style="font-size: 18px;">Processo ---</h3>
-            <p id="res-proc-tribunal" class="text-muted" style="font-size: 13px;">Tribunal: ---</p>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <h3 id="res-proc-titulo" class="text-accent" style="font-size: 18px; margin: 0;">Processo ---</h3>
+              <span id="badge-proc-grau" class="badge" style="background: var(--card-highlight-blue); color: var(--accent-text); font-weight: 700; display: none;">1º Grau</span>
+            </div>
+            <p id="res-proc-tribunal" class="text-muted" style="font-size: 13px; margin-top: 4px;">Tribunal: ---</p>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="salvarConsultaHistorico()">💾 Salvar no Histórico</button>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a id="btn-proc-link-tribunal" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="display: none; text-decoration: none;">🌐 Abrir no Tribunal</a>
+            <a id="btn-proc-link-peca" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm" style="display: none; text-decoration: none; background: #9333ea; color: #fff; font-weight: 600;">📄 Abrir Peça Recente ↗</a>
+            <button class="btn btn-secondary btn-sm" onclick="copiarDadosParaLiquidacao()">⚖️ Preencher na Liquidação</button>
+            <button class="btn btn-secondary btn-sm" onclick="salvarConsultaHistorico()">💾 Salvar no Histórico</button>
+            <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ Imprimir</button>
+          </div>
         </div>
 
+        <!-- Aviso de Fontes Consultadas e Alertas do Orquestrador -->
+        <div id="res-proc-fontes-bar" class="consulta-fontes-bar" style="display: none;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px;">📡 Fontes Consultadas:</span>
+            <div id="res-proc-fontes-badges" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
+          </div>
+          <div id="res-proc-avisos-lista" style="display: none; margin-top: 8px; flex-direction: column; gap: 4px;"></div>
+        </div>
+
+        <!-- Grid de Metadados Principais -->
         <div class="grid-cards" style="margin-top: 16px;">
           <div class="card" style="background: var(--bg-subtle); padding: 12px; border-radius: 6px;">
             <strong class="text-muted" style="font-size: 12px;">Classe Processual</strong>
@@ -159,13 +197,42 @@
             <div id="res-proc-assunto" style="font-size: 14px; font-weight: 600; margin-top: 4px;">---</div>
           </div>
           <div class="card" style="background: var(--bg-subtle); padding: 12px; border-radius: 6px;">
-            <strong class="text-muted" style="font-size: 12px;">Órgão Julgador</strong>
+            <strong class="text-muted" style="font-size: 12px;">Órgão Julgador & Comarca</strong>
             <div id="res-proc-orgao" style="font-size: 14px; font-weight: 600; margin-top: 4px;">---</div>
+          </div>
+          <div class="card" style="background: var(--bg-subtle); padding: 12px; border-radius: 6px;">
+            <strong class="text-muted" style="font-size: 12px;">Datas Processuais</strong>
+            <div id="res-proc-datas" style="font-size: 13px; font-weight: 600; margin-top: 4px;">---</div>
           </div>
         </div>
 
-        <h4 style="font-size: 15px; margin-top: 20px; margin-bottom: 10px;">Movimentações & Publicações Recentes</h4>
-        <div id="res-proc-movimentacoes" style="display: flex; flex-direction: column; gap: 8px; max-height: 350px; overflow-y: auto;">
+        <!-- Card de Partes e Representantes -->
+        <div id="res-proc-polos-box" style="margin-top: 16px; background: var(--bg-subtle); padding: 14px; border-radius: 6px; border: 1px solid var(--border);">
+          <div style="font-size: 14px; font-weight: 700; margin-bottom: 8px; color: var(--text-main);">Partes & Representantes</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
+            <div>
+              <strong style="font-size: 12px; color: var(--success); text-transform: uppercase;">● Polo Ativo (Autor)</strong>
+              <div id="res-proc-polo-ativo" style="font-size: 13px; margin-top: 4px; font-weight: 600;">---</div>
+            </div>
+            <div>
+              <strong style="font-size: 12px; color: var(--warning); text-transform: uppercase;">● Polo Passivo (Réu)</strong>
+              <div id="res-proc-polo-passivo" style="font-size: 13px; margin-top: 4px; font-weight: 600;">---</div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <strong style="font-size: 12px; color: var(--accent-text); text-transform: uppercase;">● Advogados Envolvidos</strong>
+              <div id="res-proc-advogados" style="font-size: 13px; margin-top: 4px;">---</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <h4 style="font-size: 15px; margin: 0;">Movimentações & Publicações</h4>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span id="badge-total-movs" class="text-muted" style="font-size: 12px;">0 registros</span>
+            <button id="btn-toggle-todas-movs" class="btn btn-secondary btn-sm" onclick="alternarTodasMovimentacoes()">Ver todas</button>
+          </div>
+        </div>
+        <div id="res-proc-movimentacoes" style="display: flex; flex-direction: column; gap: 8px; max-height: 450px; overflow-y: auto;">
           <!-- Itens injetados via JS -->
         </div>
       </div>
@@ -182,6 +249,16 @@
 
       <div class="card">
         <h3 class="text-accent" style="font-size: 15px; margin-bottom: 12px;">1. Parâmetros Gerais da Liquidação</h3>
+        <div class="form-row" style="margin-bottom: 12px;">
+          <div class="form-group" style="flex: 1;">
+            <label for="calc-processo-num">Número do Processo (CNJ)</label>
+            <input type="text" id="calc-processo-num" placeholder="0000000-00.0000.0.00.0000">
+          </div>
+          <div class="form-group" style="flex: 2;">
+            <label for="calc-partes-nomes">Partes (Autor × Réu)</label>
+            <input type="text" id="calc-partes-nomes" placeholder="Ex: Autor × Réu">
+          </div>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label for="calc-data-ad-quem">Data de Atualização (Ad Quem)</label>
@@ -546,6 +623,81 @@
     </section>
 
   </main>
+
+  <!-- Modal de Documento / Certidão de Movimentação Processual -->
+  <div id="modal-doc-mov" class="doc-modal-backdrop" style="display: none;" onclick="if(event.target === this) fecharDocumentoMovimentacao()">
+    <div class="doc-modal-window">
+      <div class="doc-modal-toolbar no-print">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 18px;">📄</span>
+          <div>
+            <strong id="doc-modal-header-title" style="font-size: 14px; color: var(--text-main);">Certidão de Andamento Processual</strong>
+            <div id="doc-modal-header-sub" style="font-size: 11px; color: var(--text-muted);">Fonte Oficial CNJ</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <a id="doc-modal-btn-pdf" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm" style="display: none; background: #9333ea; color: #fff; text-decoration: none;">📑 Baixar Certidão PDF (CNJ) ↗</a>
+          <a id="doc-modal-btn-tribunal" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="text-decoration: none;">🌐 Autos no Tribunal ↗</a>
+          <button class="btn btn-primary btn-sm" onclick="imprimirDocumentoMovimentacao()">🖨️ Imprimir / Salvar PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="fecharDocumentoMovimentacao()">✖ Fechar</button>
+        </div>
+      </div>
+
+      <div class="doc-modal-body" id="doc-modal-printable">
+        <div class="doc-paper">
+          <div class="doc-paper-header">
+            <div class="doc-paper-brasao">⚖️</div>
+            <div>
+              <div class="doc-paper-rep">PODER JUDICIÁRIO · CONSELHO NACIONAL DE JUSTIÇA</div>
+              <div class="doc-paper-sis" id="doc-paper-sistema">EXTRATO OFICIAL DE MOVIMENTAÇÃO PROCESSUAL — DATAJUD / CNJ</div>
+              <div class="doc-paper-trib" id="doc-paper-tribunal">TRIBUNAL DE JUSTIÇA</div>
+            </div>
+          </div>
+
+          <div class="doc-paper-meta-grid">
+            <div>
+              <span class="doc-meta-label">PROCESSO Nº (CNJ)</span>
+              <strong class="doc-meta-value" id="doc-paper-numero">---</strong>
+            </div>
+            <div>
+              <span class="doc-meta-label">CLASSE JUDICIAL</span>
+              <strong class="doc-meta-value" id="doc-paper-classe">---</strong>
+            </div>
+            <div>
+              <span class="doc-meta-label">ÓRGÃO JULGADOR</span>
+              <strong class="doc-meta-value" id="doc-paper-orgao">---</strong>
+            </div>
+            <div>
+              <span class="doc-meta-label">DATA / HORA DO ATO</span>
+              <strong class="doc-meta-value" id="doc-paper-data">---</strong>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <span class="doc-meta-label">PARTES DO PROCESSO</span>
+              <strong class="doc-meta-value" id="doc-paper-partes">---</strong>
+            </div>
+          </div>
+
+          <div class="doc-paper-section">
+            <div class="doc-section-header">
+              <span id="doc-paper-tipo-badge" class="doc-badge">ANDAMENTO PROCESSUAL</span>
+              <span id="doc-paper-id-externo" style="font-size: 11px; color: #64748b; font-family: monospace;">ID: ---</span>
+            </div>
+            <h2 class="doc-paper-mov-title" id="doc-paper-descricao">---</h2>
+            <div class="doc-paper-teor" id="doc-paper-complemento">---</div>
+          </div>
+
+          <div id="doc-paper-nota-datajud" class="doc-paper-notice">
+            <strong>ℹ️ Nota Técnica (Resolução CNJ nº 331/2020):</strong> Este documento reproduz integralmente os metadados oficiais de movimentação registrados pelo Tribunal na Base Nacional de Dados do Poder Judiciário (DataJud/CNJ). Quando houver certidão de publicação vinculada no Diário de Justiça Eletrônico Nacional (DJEN), o PDF assinado digitalmente estará disponível no botão superior.
+          </div>
+
+          <div class="doc-paper-footer">
+            <div>Documento gerado pelo <strong>Robô Jurídico Desktop</strong> em <span id="doc-paper-emissao">---</span></div>
+            <div id="doc-paper-hash" style="font-family: monospace; font-size: 10px; color: #64748b;">---</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>

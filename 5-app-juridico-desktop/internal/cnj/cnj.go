@@ -185,3 +185,103 @@ func identificarTribunal(segmento, cod int) string {
 		return fmt.Sprintf("SEG%d-TR%d", segmento, cod)
 	}
 }
+
+// GerarLinkTribunal constrói a URL oficial de consulta pública do processo no tribunal correspondente
+func GerarLinkTribunal(numeroCNJ string, tribunal string, grau string, origemCodigo int) string {
+	formatado := Formatar(numeroCNJ)
+	digitos := ApenasDigitos(numeroCNJ)
+	trib := strings.ToUpper(strings.TrimSpace(tribunal))
+	grauUpper := strings.ToUpper(strings.TrimSpace(grau))
+
+	switch trib {
+	case "TJSP":
+		if len(digitos) == 20 {
+			return fmt.Sprintf("https://esaj.tjsp.jus.br/cpopg/search.do?conversationId=&cbPesquisa=NUMPROC&numeroDigitoAnoUnificado=%s&dadosConsulta.valorConsulta=%s", digitos, digitos)
+		}
+		return "https://esaj.tjsp.jus.br/cpopg/open.do"
+
+	case "TJMG":
+		return "https://pje.tjmg.jus.br/pje/ConsultaPublica/listView.seam"
+
+	case "TJRJ":
+		if formatado != "" {
+			return fmt.Sprintf("http://www4.tjrj.jus.br/consultaProcessoWebV2/consultaProc.do?v=2&numProcesso=%s", formatado)
+		}
+		return "http://www4.tjrj.jus.br/consultaProcessoWebV2/consultaProc.do"
+
+	case "TJRS":
+		return "https://eproc1g.tjrs.jus.br/eproc/externo_controlador.php?acao=processo_consulta_publica"
+
+	case "TJPR":
+		return "https://projudi.tjpr.jus.br/projudi/"
+
+	case "TJSC":
+		return "https://eproc1g.tjsc.jus.br/eproc/externo_controlador.php?acao=processo_consulta_publica"
+
+	case "TJBA":
+		return "https://pje.tjba.jus.br/pje/ConsultaPublica/listView.seam"
+
+	case "TJDFT":
+		return "https://pje.tjdft.jus.br/consultapublica/ConsultaPublica/listView.seam"
+
+	case "TJGO":
+		return "https://projudi.tjgo.jus.br/"
+
+	case "TJCE":
+		if len(digitos) == 20 {
+			return fmt.Sprintf("https://esaj.tjce.jus.br/cpopg/search.do?cbPesquisa=NUMPROC&numeroDigitoAnoUnificado=%s", digitos)
+		}
+		return "https://esaj.tjce.jus.br/cpopg/open.do"
+
+	case "TJMS":
+		if len(digitos) == 20 {
+			return fmt.Sprintf("https://esaj.tjms.jus.br/cpopg/search.do?cbPesquisa=NUMPROC&numeroDigitoAnoUnificado=%s", digitos)
+		}
+		return "https://esaj.tjms.jus.br/cpopg/open.do"
+
+	case "TRF1":
+		if grauUpper == "G2" || grauUpper == "TR" {
+			return "https://pje2g.trf1.jus.br/consultapublica/ConsultaPublica/listView.seam"
+		}
+		return "https://pje1g.trf1.jus.br/consultapublica/ConsultaPublica/listView.seam"
+
+	case "TRF2":
+		return "https://eproc.trf2.jus.br/eproc/externo_controlador.php?acao=processo_consulta_publica"
+
+	case "TRF3":
+		if grauUpper == "G2" {
+			return "https://pje2g.trf3.jus.br/pje/ConsultaPublica/listView.seam"
+		}
+		return "https://pje1g.trf3.jus.br/pje/ConsultaPublica/listView.seam"
+
+	case "TRF4":
+		return "https://eproc.trf4.jus.br/eproc2trf4/externo_controlador.php?acao=processo_consulta_publica"
+
+	case "TRF5":
+		if grauUpper == "G2" {
+			return "https://pje.trf5.jus.br/pje2g/ConsultaPublica/listView.seam"
+		}
+		return "https://pje.trf5.jus.br/pje/ConsultaPublica/listView.seam"
+
+	case "TRF6":
+		return "https://pje1g.trf6.jus.br/pje/ConsultaPublica/listView.seam"
+
+	case "STJ":
+		if len(digitos) == 20 {
+			return fmt.Sprintf("https://processo.stj.jus.br/processo/pesquisa/?num_registro=%s", digitos)
+		}
+		return "https://processo.stj.jus.br/"
+
+	case "STF":
+		return "https://portal.stf.jus.br/processos/"
+
+	case "TST":
+		return "https://consultaprocessual.tst.jus.br/"
+
+	default:
+		if strings.HasPrefix(trib, "TJ") || strings.HasPrefix(trib, "TRT") {
+			return fmt.Sprintf("https://pje.%s.jus.br/pje/ConsultaPublica/listView.seam", strings.ToLower(trib))
+		}
+		return fmt.Sprintf("https://comunica.pje.jus.br/consulta?numeroProcesso=%s", digitos)
+	}
+}

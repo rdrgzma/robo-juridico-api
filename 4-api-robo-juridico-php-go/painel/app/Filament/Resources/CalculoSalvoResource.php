@@ -89,7 +89,16 @@ class CalculoSalvoResource extends Resource
                     ->label('Processo CNJ')
                     ->fontFamily('mono')
                     ->searchable()
-                    ->placeholder('Extrajudicial'),
+                    ->placeholder('Extrajudicial')
+                    ->icon('heroicon-m-arrow-top-right-on-square')
+                    ->iconPosition('after')
+                    ->color('primary')
+                    ->url(function (CalculoSalvo $record): ?string {
+                        if (empty($record->numero_processo)) return null;
+                        $num = preg_replace('/\D+/', '', (string) $record->numero_processo);
+                        return "https://comunica.pje.jus.br/consulta?numeroProcesso={$num}";
+                    })
+                    ->openUrlInNewTab(),
                 Tables\Columns\TextColumn::make('indexador_codigo')
                     ->label('Indexador')
                     ->badge()
