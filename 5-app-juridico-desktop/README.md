@@ -53,10 +53,13 @@ chmod +x iniciar-desktop.sh
    * Status de ativação da licença e data de expiração.
    * Total de índices carregados e atalhos rápidos.
 
-2. **Consulta Unificada CNJ (DataJud + DJEN):**
-   * Validação em tempo real do dígito verificador CNJ (Módulo 97).
-   * Identificação do tribunal de origem.
-   * Exibição de classe, assunto, órgão julgador e timeline de movimentações recentes.
+2. **Consulta Unificada CNJ (DataJud + DJEN) & Visualizador de Documentos:**
+   * **Validação em tempo real** do dígito verificador CNJ (Módulo 97) e identificação automática do Tribunal/Segmento.
+   * **Limpeza Automática & Card Animado de Consulta às Fontes Oficiais:** Ao digitar um novo processo ou iniciar uma nova busca, os resultados anteriores são limpos imediatamente e substituídos por um banner animado indicando as bases oficiais conectadas em tempo real (`🏛️ DataJud / CNJ` e `📰 DJEN / Comunica PJe`).
+   * **Barra de Fontes Consultadas e Avisos:** Exibe de forma destacada no resultado quais bases responderam, a contagem exata de andamentos do DataJud e publicações do DJEN, além de alertas de sincronização do orquestrador.
+   * **Links de Peças e Certidões PDF (`📄 Abrir Peça (PDF) ↗`):** Acesso direto em 1 clique às certidões oficiais em PDF do CNJ/DJEN (`comunicaapi.pje.jus.br/api/v1/comunicacao/{hash}/certidao`) e documentos do PJe, com correlação automática entre andamentos do DataJud e publicações do DJEN na mesma janela de 72h.
+   * **Visualizador Integrado de Documento / Certidão Oficial (`📄 Ver Documento`):** Todas as movimentações (tanto do **DataJud** quanto do **DJEN**) contam com um modal em formato **Folha A4 Oficial do Poder Judiciário** exibindo os metadados completos do processo, código identificador TPU/CNJ, data/hora UTC, unidade judiciária e teor completo do andamento, com botão próprio de **`🖨️ Imprimir / Salvar PDF`**.
+   * **1-Click Auto-Fill para Liquidação:** Transfere automaticamente número do processo, partes (Autor × Réu), indexador do tribunal e valor da causa para a aba de Liquidação Judicial.
 
 3. **Liquidação Judicial de Sentença:**
    * Padrão oficial DrCalc / PJe-Calc.

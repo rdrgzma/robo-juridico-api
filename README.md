@@ -13,8 +13,8 @@ O **Robô Jurídico** resolve a fragmentação dos dados jurídicos no Brasil at
 O projeto é disponibilizado em quatro modalidades prontas para uso:
 1. **Biblioteca Python** (`from consulta_processos import consultar_processo, buscar_por_oab`)
 2. **Interface Web Local** (`consulta-processos web` em `http://localhost:8765`, sem dependências externas)
-3. **API REST FastAPI com Painel SaaS** (`consulta-processos api` em `http://127.0.0.1:8000`), incluindo documentação interativa Swagger (`/docs`), gestão de clientes, chaves (`rj_live_...`), limites de requisições por minuto e controle atômico de cotas mensais (`/admin`).
-4. **Aplicativo Desktop On-Premise Windows & Linux** (`5-app-juridico-desktop/`): Executável nativo autocontido com SQLite local, motor de cálculo pericial (DrCalc / Lei 14.905 / Art. 354 CC / Revisional / Prazos), consulta CNJ e licenciamento criptográfico ECDSA por Hardware ID.
+3. **API REST FastAPI / Go com Painel SaaS & Calculadora Judicial** (`3-api-robo-juridico/` e `4-api-robo-juridico-php-go/`), incluindo documentação interativa Swagger (`/docs`), gestão de clientes, chaves (`rj_live_...`), motor de cálculos judiciais (DrCalc / Lei 14.905/2024 / Art. 354 CC / Art. 523 CPC), links diretos para certidões PDF do DJEN (`/api/v1/comunicacao/{hash}/certidao`), correlação inteligente DataJud ↔ DJEN e Portal do Cliente (`/admin` e `/portal`).
+4. **Aplicativo Desktop On-Premise Windows & Linux** (`5-app-juridico-desktop/`): Executável nativo autocontido com SQLite local, motor de cálculo pericial completo, consulta CNJ unificada com banner em tempo real das fontes oficiais, visualizador de Certidão/Documento Oficial A4 para andamentos do DataJud e DJEN, e licenciamento criptográfico ECDSA por Hardware ID.
 
 ---
 

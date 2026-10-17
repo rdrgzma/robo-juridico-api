@@ -68,8 +68,14 @@ O sistema conta com um motor completo de inteligência processual, cálculos fin
      - **Trabalhista:** TST Trabalhista (ADC 58 STF - IPCA-E / Selic).
      - **Índices Econômicos:** IPCA (IBGE), IPCA-15 (IBGE), INPC (IBGE), SELIC Acumulada, CDI, Taxa Legal Bacen, IGP-M (FGV), IGP-DI (FGV), INCC (FGV), TR e Poupança.
 
-2. **Autopreenchimento Judicial "1-Click Liquidation" (CNJ $\rightarrow$ Calculadora):**
+2. **Autopreenchimento Judicial "1-Click Liquidation" & Consulta Unificada Inteligente (DataJud + DJEN):**
    - Ao informar o número do processo CNJ na Calculadora Pública ou nos Painéis (`/admin` e `/portal`), o sistema decodifica o tribunal, seleciona automaticamente o indexador correspondente (ex.: `TJMG`, `TJSP`, `TRF_GERAL`, `TST_IPCAE`) e consulta o DataJud/DJEN para preencher automaticamente o **Valor da Causa**, **Data de Ajuizamento** e **Partes (Autor × Réu)**.
+   - **Fast-Fallback & Cache Background:** Consultas em modo `completo` disparam goroutines paralelas no DataJud e no DJEN. Se o DJEN responder rapidamente e o DataJud do tribunal estiver lento (> 4,5s), a API retorna imediatamente os dados consolidados com aviso transparente e conclui a sincronização profunda do DataJud em background no cache.
+   - **Links Oficiais Separados (`link` vs `link_peca`):**
+     - `link`: URL oficial de consulta pública dos autos no respectivo Tribunal (PJe, eproc, e-SAJ).
+     - `link_peca`: Link direto para o documento/peça processual ou **Certidão Oficial em PDF do CNJ** (`https://comunicaapi.pje.jus.br/api/v1/comunicacao/{hash}/certidao`), preservando IDs longos sem perda de precisão em ponto flutuante.
+   - **Correlação Inteligente DataJud ↔ DJEN:** Movimentações publicáveis do DataJud (`sentenca`, `decisao`, `despacho`, `intimacao`, `publicacao_dje`) recebem automaticamente o `link_peca` da certidão do DJEN quando publicadas na mesma janela temporal (até 72h), além de manterem o `link` de consulta ao tribunal.
+   - **Sanitização Avançada de Partes e Textos:** Filtragem automática de cabeçalhos de secretaria, assinaturas de magistrados, varas e sufixos societários órfãos (`LTDA`, `S/A`) nas publicações do DJEN, e decodificação de *mojibake* e complementos tabelados no DataJud.
 
 3. **Módulo de Revisão de Contratos Bancários (`PRICE`, `SAC` e `GAUSS`):**
    - Endpoint `POST /v1/calculos/financiamento` que compara o sistema contratado (Tabela Price, SAC ou Gauss) com a taxa média de mercado ou método linear de Gauss (juros simples sem anatocismo), apurando diferença mensal, saldo devedor recalculado e **repetição do indébito simples e em dobro (Art. 42, parágrafo único do CDC)**.

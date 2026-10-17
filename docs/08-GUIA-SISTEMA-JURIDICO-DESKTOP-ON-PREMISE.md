@@ -85,9 +85,13 @@ O sistema coleta o identificador de hardware do computador:
 * **Encargos da Execução:** Multa de 10% e honorários de 10% do Art. 523 do CPC/2015.
 * **Exportação:** Emissão de memória analítica mês a mês pronta para exportar em `.csv` (Excel) e impressão em formato Laudo Pericial A4.
 
-### 4.2. Consulta Unificada CNJ (DataJud + DJEN)
-* Validação do dígito verificador CNJ Módulo 97 em tempo real enquanto o advogado digita.
-* Busca paralela concorrente via goroutines no DataJud (capa, classe, assunto, movimentações) e no DJEN (teor das intimações e publicações oficiais).
+### 4.2. Consulta Unificada CNJ (DataJud + DJEN) & Visualizador de Documentos Oficiais
+* **Validação Módulo 97 e Limpeza Automática:** Validação em tempo real do dígito verificador CNJ enquanto o advogado digita, limpando imediatamente qualquer resultado anterior ao alterar o número do processo.
+* **Card Animado de Consulta em Tempo Real:** Durante a busca, um painel visual com indicadores pulsantes informa quais bases oficiais estão sendo consultadas simultaneamente (`🏛️ DataJud / CNJ` e `📰 DJEN / Comunica PJe`).
+* **Barra de Fontes Consultadas e Avisos do Orquestrador:** Exibe no topo do resultado os badges de cada base que respondeu (com a contagem de andamentos do DataJud e publicações do DJEN) e eventuais alertas de sincronização em cache (*fast-fallback* de 4,5s quando o DataJud do tribunal apresenta lentidão).
+* **Acesso Direto a Peças e Certidões PDF (`link_peca`):** Mapeia o `hash` criptográfico de cada publicação do DJEN diretamente para o endpoint de certidão oficial em PDF do CNJ (`https://comunicaapi.pje.jus.br/api/v1/comunicacao/{hash}/certidao`), além de correlacionar automaticamente andamentos publicáveis do DataJud com as certidões do DJEN na mesma janela temporal (72h).
+* **Visualizador Integrado de Documento / Certidão A4 (`📄 Ver Documento`):** Todas as movimentações (incluindo andamentos do **DataJud** e comunicações do **DJEN**) possuem o botão `📄 Ver Documento`, que abre um modal em formato **Folha A4 Oficial do Poder Judiciário** com cabeçalho institucional, metadados completos dos autos, código TPU/CNJ (`id_externo`), teor detalhado do movimento e botão `🖨️ Imprimir / Salvar PDF`.
+* **1-Click Auto-Fill para Liquidação:** Botão que transfere número do processo, partes (`Autor × Réu`), indexador automático do tribunal e valor da causa diretamente para o formulário de Liquidação Judicial.
 
 ### 4.3. Calculadora de Prazos Processuais
 * Contagem estrita em dias úteis conforme Art. 219 do CPC/2015 e Art. 775 da CLT.

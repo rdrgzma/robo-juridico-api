@@ -86,7 +86,8 @@ Retorna a visão integral do processo: capa, órgãos julgadores, partes polariz
     "assunto": "Indenização por Dano Moral",
     "orgao_julgador": "Turma Recursal de Belo Horizonte",
     "comarca": "Belo Horizonte",
-    "link": "https://pje.tjmg.jus.br/...",
+    "link": "https://pje.tjmg.jus.br/pje/ConsultaPublica/listView.seam",
+    "link_peca": "https://comunicaapi.pje.jus.br/api/v1/comunicacao/QJDEM7aXY8BIQ1aUrTVzl1L6oWe2dL/certidao",
     "valor_causa": 12500.0,
     "valor_causa_formatado": "R$ 12.500,00",
     "data_ajuizamento": "2024-05-10T14:22:00Z",
@@ -134,7 +135,20 @@ Retorna a visão integral do processo: capa, órgãos julgadores, partes polariz
         "complemento": "Certificado o trânsito",
         "orgao": "Secretaria",
         "fonte": "datajud",
-        "link": ""
+        "link": "https://pje.tjmg.jus.br/pje/ConsultaPublica/listView.seam",
+        "id_externo": "848_2026-09-14T12:44:48_a1b2c3d4"
+      },
+      {
+        "data": "2026-09-02T00:00:00Z",
+        "data_formatada": "02/09/2026",
+        "tipo": "intimacao",
+        "descricao": "Intimação",
+        "complemento": "Ficam as partes intimadas para cumprimento do acórdão...",
+        "orgao": "Turma Recursal",
+        "fonte": "comunica",
+        "link": "https://comunicaapi.pje.jus.br/api/v1/comunicacao/QJDEM7aXY8BIQ1aUrTVzl1L6oWe2dL/certidao",
+        "link_peca": "https://comunicaapi.pje.jus.br/api/v1/comunicacao/QJDEM7aXY8BIQ1aUrTVzl1L6oWe2dL/certidao",
+        "id_externo": "comunica-715599267"
       }
     ],
     "publicacoes": [
@@ -148,7 +162,8 @@ Retorna a visão integral do processo: capa, órgãos julgadores, partes polariz
         "numero_processo": "5010754-07.2024.8.13.0625",
         "classe": "Recurso Inominado Cível",
         "texto": "Ficam as partes intimadas para cumprimento do acórdão...",
-        "link": "https://pje.tjmg.jus.br/...",
+        "link": "https://comunicaapi.pje.jus.br/api/v1/comunicacao/QJDEM7aXY8BIQ1aUrTVzl1L6oWe2dL/certidao",
+        "link_peca": "https://comunicaapi.pje.jus.br/api/v1/comunicacao/QJDEM7aXY8BIQ1aUrTVzl1L6oWe2dL/certidao",
         "partes": [],
         "advogados": []
       }
@@ -163,6 +178,11 @@ Retorna a visão integral do processo: capa, órgãos julgadores, partes polariz
   }
 }
 ```
+
+> [!TIP]
+> **Diferença entre `link` e `link_peca`:**
+> - `processo.link`: Aponta sempre para o portal oficial de consulta pública processual do Tribunal (PJe, eproc, e-SAJ).
+> - `processo.link_peca` / `movimentacoes[].link_peca`: Aponta diretamente para o **PDF oficial da Certidão de Publicação do CNJ** (`https://comunicaapi.pje.jus.br/api/v1/comunicacao/{hash}/certidao`) ou documento público do PJe (`ConsultaDocumento/listView.seam?x=...`). Quando um movimento do DataJud corresponde a um ato publicado no DJEN (janela de até 72h), o orquestrador preenche automaticamente `link_peca` também no movimento do DataJud.
 
 ---
 
